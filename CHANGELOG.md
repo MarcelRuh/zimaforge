@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.6] – 2026-11-16
 
 ### Behoben
 - Ungleiche Abstände in der Widget-Spalte: Eingehängte Widgets (Pulse, Wetter) übernehmen jetzt die berechneten Abstände der nativen ZimaOS-Widgets statt eines festen Werts. Funktioniert mit `margin`, `gap` und Geschwister-Regeln (im Mock alle drei geprüft).
