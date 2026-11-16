@@ -109,6 +109,11 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
     parts
         .headers
         .insert("x-forwarded-proto", HeaderValue::from_static("http"));
+    // Damit ZimaOS Links und Weiterleitungen auf den Port von ZimaForge bezieht
+    // (z. B. 80, wenn ZimaOS selbst auf 8081 verschoben wurde).
+    parts
+        .headers
+        .insert("x-forwarded-port", HeaderValue::from(state.config.listen.port()));
     if let Some(addr) = client_addr
         && let Ok(ip) = HeaderValue::from_str(&addr.ip().to_string())
     {

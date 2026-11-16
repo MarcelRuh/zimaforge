@@ -41,6 +41,7 @@ fn fake_zimaos() -> Router {
                 axum::Json(serde_json::json!({
                     "acceptEncoding": headers.get(header::ACCEPT_ENCODING).is_some(),
                     "forwardedHost": headers.get("x-forwarded-host").and_then(|v| v.to_str().ok()),
+                    "forwardedPort": headers.get("x-forwarded-port").and_then(|v| v.to_str().ok()),
                     "realIp": headers.get("x-real-ip").and_then(|v| v.to_str().ok()),
                 }))
             }),
@@ -191,6 +192,7 @@ async fn passes_api_calls_through_with_forward_headers() {
     let v: serde_json::Value = serde_json::from_str(&r.body).unwrap();
     assert_eq!(v["acceptEncoding"], false, "Accept-Encoding muss entfernt werden");
     assert_eq!(v["forwardedHost"], f.addr.to_string());
+    assert_eq!(v["forwardedPort"], "8077", "Port aus der ZimaForge-Konfiguration");
     assert_eq!(v["realIp"], "127.0.0.1");
 }
 

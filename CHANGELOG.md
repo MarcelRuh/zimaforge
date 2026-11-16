@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Neu
+- `docker-compose.standardport.yml`: ZimaForge auf Port 80, ZimaOS dahinter auf 8081. Damit erscheinen die Mods unter der normalen Dashboard-Adresse.
+- Der Proxy schickt `X-Forwarded-Port` mit, damit ZimaOS Links auf den Port von ZimaForge bezieht.
+
 ## [0.1.0] – 2026-11-16
 
 ### Neu

@@ -47,6 +47,16 @@ Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im
 
 Der fertige YAML-Block zum Kopieren steht auch in den Notizen jedes [Releases](https://github.com/MarcelRuh/zimaforge/releases/latest).
 
+### Mods direkt auf dem Standardport
+
+Damit die Mods unter der normalen Adresse `http://<ZIMAOS-IP>/` erscheinen, tauschen ZimaForge und ZimaOS die Ports:
+
+1. In ZimaOS unter **Einstellungen** den Dashboard-Port auf **8081** stellen.
+2. Statt `docker-compose.yml` die Datei [`docker-compose.standardport.yml`](docker-compose.standardport.yml) importieren (`ZIMAFORGE_PORT: "80"`, `ZIMAFORGE_UPSTREAM: http://127.0.0.1:8081`).
+3. `http://<ZIMAOS-IP>/` öffnen: Das ist jetzt dein Dashboard mit Mods.
+
+Läuft ZimaForge einmal nicht, ist das Dashboard weiter direkt unter `:8081` erreichbar.
+
 ### Per SSH
 
 ```bash

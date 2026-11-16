@@ -28,10 +28,10 @@ jobs:
           want="${GITHUB_REF_NAME#v}"
           have="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
           test "$want" = "$have" || { echo "Tag $want ≠ Cargo.toml $have"; exit 1; }
-          grep -q "image: ghcr.io/marcelruh/zimaforge:$want\$" docker-compose.yml \
-            || { echo "docker-compose.yml: Image-Tag ist nicht $want"; exit 1; }
-          grep -q "^  version: \"$want\"\$" docker-compose.yml \
-            || { echo "docker-compose.yml: x-casaos.version ist nicht $want"; exit 1; }
+          for f in docker-compose.yml docker-compose.standardport.yml; do
+            grep -q "image: ghcr.io/marcelruh/zimaforge:$want\$" "$f" || { echo "$f: Image-Tag ist nicht $want"; exit 1; }
+            grep -q "^  version: \"$want\"\$" "$f" || { echo "$f: x-casaos.version ist nicht $want"; exit 1; }
+          done
 
   build:
     needs: test
@@ -118,5 +118,6 @@ jobs:
         run: |
           sh dev/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
           cp docker-compose.yml zimaforge-docker-compose.yml
+          cp docker-compose.standardport.yml zimaforge-docker-compose-standardport.yml
           gh release create "$GITHUB_REF_NAME" --title "ZimaForge $GITHUB_REF_NAME" \
-            --notes-file notes.md zimaforge-docker-compose.yml
+            --notes-file notes.md zimaforge-docker-compose.yml zimaforge-docker-compose-standardport.yml

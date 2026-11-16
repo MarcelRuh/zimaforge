@@ -1,0 +1,61 @@
+# ZimaForge auf dem Standardport 80 – ZimaOS läuft dahinter auf 8081.
+# Voraussetzung: In ZimaOS unter Einstellungen den Dashboard-Port auf 8081 stellen
+# (sonst ist Port 80 belegt und ZimaForge startet nicht).
+# Fallback, falls ZimaForge nicht läuft: http://<ZIMAOS-IP>:8081
+name: zimaforge
+
+services:
+  zimaforge:
+    image: ghcr.io/marcelruh/zimaforge:0.1.0
+    container_name: zimaforge
+    # Host-Netzwerk: ZimaForge belegt Port 80 und erreicht ZimaOS auf 127.0.0.1:8081.
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      ZIMAFORGE_PORT: "80"
+      ZIMAFORGE_UPSTREAM: http://127.0.0.1:8081
+      ZIMAFORGE_LOG: info
+    volumes:
+      - type: bind
+        source: /DATA/AppData/zimaforge
+        target: /data
+      - type: bind
+        source: /proc
+        target: /host/proc
+        read_only: true
+      - type: bind
+        source: /sys
+        target: /host/sys
+        read_only: true
+    labels:
+      icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.svg
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: zimaforge
+  author: MarcelRuh
+  developer: MarcelRuh
+  category: Utilities
+  icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.svg
+  index: /?forge
+  port_map: "80"
+  scheme: http
+  store_app_id: zimaforge
+  title:
+    en_us: ZimaForge
+    de_de: ZimaForge
+  tagline:
+    en_us: Forge your ZimaOS dashboard with mods
+    de_de: Mods für dein ZimaOS-Dashboard
+  description:
+    en_us: >-
+      ZimaForge sits in front of the ZimaOS dashboard and loads JavaScript and CSS mods.
+      Single Rust binary, built-in mod store, ZimaMOD-compatible, secured by your ZimaOS login.
+    de_de: >-
+      ZimaForge sitzt vor dem ZimaOS-Dashboard und lädt JavaScript- und CSS-Mods.
+      Ein einzelnes Rust-Binary, eingebauter Mod-Store, ZimaMOD-kompatibel, abgesichert über die ZimaOS-Anmeldung.
+  version: "0.1.0"
+  repo: https://github.com/MarcelRuh/zimaforge
+  support: https://github.com/MarcelRuh/zimaforge/issues
