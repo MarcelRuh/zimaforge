@@ -41,6 +41,11 @@ const page = `<!doctype html>
   const sync=()=>b.textContent=localStorage.getItem("access_token")?"Abmelden (Mock)":"Anmelden (Mock)";
   b.onclick=()=>{localStorage.getItem("access_token")?localStorage.removeItem("access_token"):localStorage.setItem("access_token","${TOKEN}");sync()};
   sync();
+  // Wie ZimaOS: Kachel öffnet die Web-URL der App (Host + port_map + index) in einem neuen Tab.
+  const urls={ZimaForge:"8077/?forge",Jellyfin:"8096/"};
+  document.querySelectorAll(".app").forEach(t=>t.onclick=()=>{
+    const u=urls[t.dataset.appName]; if(u) window.open(location.protocol+"//"+location.hostname+":"+u,"_blank");
+  });
 </script></body></html>`;
 
 http

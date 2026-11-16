@@ -458,6 +458,49 @@ if (!customElements.get("zimaforge-store")) {
     }
   }, true);
 
+  interceptSelfLinks();
+
   const params = new URLSearchParams(location.search);
   if (params.has("forge") || location.hash === "#forge") void F.openStore(params.get("forge") || undefined);
+}
+
+/**
+ * Prüft, ob eine URL auf genau diese ZimaForge-Seite zeigt, z. B. wenn ZimaOS die
+ * eigene ZimaForge-Kachel öffnet (`http://<host>:8077/?forge`).
+ */
+function isSelfUrl(raw) {
+  try {
+    const url = new URL(String(raw), location.href);
+    if (url.origin !== location.origin) return false;
+    return url.searchParams.has("forge") || url.hash === "#forge";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Klick auf die ZimaForge-Kachel innerhalb von ZimaForge: statt eines zweiten Tabs
+ * direkt den Store öffnen. Greift für `window.open(...)` und für Links mit
+ * `target="_blank"`, unabhängig vom Dashboard-DOM.
+ */
+function interceptSelfLinks() {
+  const nativeOpen = window.open;
+  window.open = function forgeOpen(url, target, features) {
+    if (url != null && isSelfUrl(url) && target !== "_self") {
+      const view = new URL(String(url), location.href).searchParams.get("forge") || undefined;
+      void F.openStore(view);
+      // Aufrufer erwarten meist ein Fensterobjekt (z. B. für .focus()).
+      return window;
+    }
+    return nativeOpen.call(this, url, target, features);
+  };
+
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    const link = e.composedPath().find((el) => el instanceof HTMLAnchorElement && el.href);
+    if (!link || link.target !== "_blank" || !isSelfUrl(link.href)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    void F.openStore(new URL(link.href).searchParams.get("forge") || undefined);
+  }, true);
 }

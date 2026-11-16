@@ -8,6 +8,9 @@ Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](http
 - `docker-compose.standardport.yml`: ZimaForge auf Port 80, ZimaOS dahinter auf 8081. Damit erscheinen die Mods unter der normalen Dashboard-Adresse.
 - Der Proxy schickt `X-Forwarded-Port` mit, damit ZimaOS Links auf den Port von ZimaForge bezieht.
 
+### Behoben
+- Ein Klick auf die ZimaForge-Kachel innerhalb von ZimaForge öffnet jetzt direkt den Store statt eines zweiten Tabs.
+
 ## [0.1.0] – 2026-11-16
 
 ### Neu
