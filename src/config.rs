@@ -20,6 +20,8 @@ pub struct Config {
     pub proc_dir: PathBuf,
     /// `/sys` des Hosts für Temperaturen.
     pub sys_dir: PathBuf,
+    /// Optional: `<docker-root>/containers` des Hosts (schreibgeschützt) für App-Namen.
+    pub docker_dir: PathBuf,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -72,6 +74,7 @@ impl Config {
             catalog_dir: var("ZIMAFORGE_CATALOG", "/opt/zimaforge/catalog").into(),
             proc_dir: var("ZIMAFORGE_PROC", "/host/proc").into(),
             sys_dir: var("ZIMAFORGE_SYS", "/host/sys").into(),
+            docker_dir: var("ZIMAFORGE_DOCKER", "/host/docker/containers").into(),
         })
     }
 }

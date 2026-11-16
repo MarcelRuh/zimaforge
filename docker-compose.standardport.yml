@@ -27,6 +27,12 @@ services:
         source: /sys
         target: /host/sys
         read_only: true
+      # Optional – App-Namen in Forge Pulse (Apps-Liste). Pfad = Docker-Root + /containers,
+      # prüfen mit: docker info --format '{{.DockerRootDir}}'
+      # - type: bind
+      #   source: /var/lib/docker/containers
+      #   target: /host/docker/containers
+      #   read_only: true
     labels:
       icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.png
 

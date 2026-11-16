@@ -75,6 +75,7 @@ pub fn router() -> Router<AppState> {
         .route("/store/{id}", post(install).delete(uninstall))
         .route("/config/{id}", get(read_config).put(write_config))
         .route("/metrics", get(metrics))
+        .route("/system", get(system))
         .route("/session", get(session))
         .layer(DefaultBodyLimit::max(mods::MAX_CONFIG_BYTES));
 
@@ -163,6 +164,10 @@ async fn write_config(
 
 async fn metrics(State(state): State<AppState>) -> Response {
     no_store(serde_json::to_value(state.metrics.snapshot().await).unwrap_or_default())
+}
+
+async fn system(State(state): State<AppState>) -> Response {
+    no_store(serde_json::to_value(state.system.snapshot().await).unwrap_or_default())
 }
 
 async fn session(State(state): State<AppState>, headers: HeaderMap) -> ApiResult {

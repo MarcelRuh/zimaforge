@@ -2,6 +2,16 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Neu
+- `/_forge/api/system`: Detailwerte wie in btop – Auslastung je Kern, Kerntemperaturen (coretemp/k10temp), CPU-Modell und Takt, RAM-Aufteilung (belegt, Cache, frei, Swap), Belegung des DATA-Laufwerks, Lese-/Schreibzähler, Netzwerk je Schnittstelle, Top-Prozesse und Verbrauch je App (Prozesse über cgroups den Docker-Containern zugeordnet).
+- Forge Pulse 2.2: Tabs CPU, RAM, Disk, Netz und Prozesse; Apps-Liste nach CPU bzw. RAM wie im ZimaOS-System-Widget, mit Titel und Icon aus ZimaOS.
+- Optionaler Compose-Block für die Docker-Metadaten (App-Namen).
+
+### Geändert
+- ☰ in Forge Pulse sucht den btop-Button von ZimaOS über die Position auf dem Bildschirm (Icon rechts neben „RAM“) statt über den DOM-Aufbau.
+
 ## [0.2.1] – 2026-11-16
 
 ### Geändert

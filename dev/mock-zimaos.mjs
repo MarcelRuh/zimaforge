@@ -2,7 +2,7 @@
 //
 //   node dev/mock-zimaos.mjs            # Gateway auf :8081, simuliert /proc in dev-data/
 //   ZIMAFORGE_UPSTREAM=http://127.0.0.1:8081 ZIMAFORGE_DATA=dev-data/data \
-//   ZIMAFORGE_CATALOG=mods ZIMAFORGE_PROC=dev-data/proc ZIMAFORGE_SYS=dev-data/sys cargo run
+//   ZIMAFORGE_CATALOG=mods ZIMAFORGE_PROC=dev-data/proc ZIMAFORGE_SYS=dev-data/sys ZIMAFORGE_DOCKER=dev-data/docker cargo run
 //
 // Danach http://127.0.0.1:8077 öffnen. Der Fake-Login setzt localStorage.access_token.
 
@@ -89,6 +89,14 @@ http
       res.writeHead(ok ? 200 : 401, { "content-type": "application/json" });
       return res.end(ok ? '{"data":{"username":"admin"}}' : '{"message":"unauthorized"}');
     }
+    if (url.pathname === "/v2/app_management/web/appgrid") {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ data: [
+        { name: "plex", title: { en_us: "Plex" }, icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Plex/icon.png" },
+        { name: "immich", title: { en_us: "Immich" } },
+      ] }));
+    }
     if (url.pathname === "/v1/sys/utilization") {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
       // Form wie CasaOS/ZimaOS: Prozentwerte direkt, Leistung als RAPL-Zähler (µJ).
@@ -125,7 +133,10 @@ const write = () => {
   idle += Math.round(400 * (1 - load));
   rx += Math.round(2e6 + Math.random() * 3e6);
   tx += Math.round(3e5 + Math.random() * 6e5);
-  fs.writeFileSync(path.join(proc, "stat"), `cpu  ${busy} 0 0 ${idle} 0 0 0 0 0 0\ncpu0 0 0 0 0\ncpu1 0 0 0 0\ncpu2 0 0 0 0\ncpu3 0 0 0 0\n`);
+  const cores = [0.9, 1.1, 0.7, 1.3]
+    .map((f, i) => `cpu${i} ${Math.round((busy / 4) * f)} 0 0 ${Math.round((idle / 4) * (2 - f))} 0\n`)
+    .join("");
+  fs.writeFileSync(path.join(proc, "stat"), `cpu  ${busy} 0 0 ${idle} 0 0 0 0 0 0\n${cores}`);
   const total = 16 * 1024 * 1024;
   const avail = Math.round(total * (0.45 + 0.05 * Math.sin(t / 9)));
   fs.writeFileSync(path.join(proc, "meminfo"), `MemTotal: ${total} kB\nMemAvailable: ${avail} kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n`);
@@ -134,5 +145,42 @@ const write = () => {
   fs.writeFileSync(path.join(proc, "net/dev"), `h\nh\n  eth0: ${rx} 0 0 0 0 0 0 0 ${tx} 0 0 0 0 0 0 0\n`);
   fs.writeFileSync(path.join(sys, "temp"), `${Math.round(46000 + 6000 * load)}\n`);
 };
-write();
-setInterval(write, 1000);
+// Simulierte Prozesse in Containern (für Apps- und Prozess-Ansicht in Forge Pulse)
+const docker = path.join(ROOT, "docker");
+const APPS = [["plex", "a1"], ["immich", "b2"], ["aliasvault", "c3"]];
+for (const [name, p] of APPS) {
+  const id = p.repeat(32);
+  fs.mkdirSync(path.join(docker, id), { recursive: true });
+  fs.writeFileSync(path.join(docker, id, "config.v2.json"), JSON.stringify({ Name: "/" + name, Config: { Labels: { "com.docker.compose.project": name } } }));
+}
+const PROCS = [[101, "Plex Media Serv", 0, 0.6, 22000], [102, "Plex Transcoder", 0, 1.4, 31000], [201, "immich", 1, 0.4, 110000], [202, "python", 1, 0.3, 40000], [301, "dotnet", 2, 0.2, 60000], [401, "zimaos-gateway", -1, 0.1, 17000], [402, "btop", -1, 0.05, 7000]];
+const ticks = new Map();
+const hw = path.join(ROOT, "sys/class/hwmon/hwmon0");
+fs.mkdirSync(hw, { recursive: true });
+fs.writeFileSync(path.join(hw, "name"), "coretemp\n");
+fs.writeFileSync(
+  path.join(proc, "cpuinfo"),
+  Array.from({ length: 4 }, (_, i) => `processor\t: ${i}\nmodel name\t: 12th Gen Intel(R) Core(TM) i5-1235U\ncpu MHz\t\t: ${4200 + i * 50}.000\n`).join("\n"),
+);
+let rd = 0, wr = 0;
+const writeExtra = () => {
+  for (const [pid, name, app, share, rssKb] of PROCS) {
+    const d = path.join(proc, String(pid));
+    fs.mkdirSync(d, { recursive: true });
+    const tk = (ticks.get(pid) ?? 0) + Math.round(share * 4 * (0.5 + Math.random()));
+    ticks.set(pid, tk);
+    fs.writeFileSync(path.join(d, "stat"), `${pid} (${name}) S 1 1 1 0 0 0 0 0 0 0 ${tk} 0 0 0`);
+    fs.writeFileSync(path.join(d, "statm"), `0 ${rssKb / 4} 0 0 0 0 0`);
+    fs.writeFileSync(path.join(d, "cgroup"), app >= 0 ? `0::/system.slice/docker-${APPS[app][1].repeat(32)}.scope` : "0::/system.slice/zimaos.service");
+  }
+  const temps = [["Package id 0", 49], ["Core 0", 49], ["Core 4", 38], ["Core 8", 32]];
+  temps.forEach(([label, c], i) => {
+    fs.writeFileSync(path.join(hw, `temp${i + 1}_label`), label);
+    fs.writeFileSync(path.join(hw, `temp${i + 1}_input`), String((c + Math.round(Math.random() * 3)) * 1000));
+  });
+  rd += Math.round(Math.random() * 4000); wr += Math.round(Math.random() * 9000);
+  fs.writeFileSync(path.join(proc, "diskstats"), `   8       0 sda 1 0 ${rd} 0 1 0 ${wr} 0 0 0 0\n   7       0 loop0 1 0 99 0 0 0 0 0 0 0 0\n`);
+};
+const writeAll = () => { write(); writeExtra(); };
+writeAll();
+setInterval(writeAll, 1000);

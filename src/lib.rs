@@ -12,6 +12,7 @@ pub mod metrics;
 pub mod mods;
 pub mod proxy;
 pub mod state;
+pub mod sysinfo;
 
 use axum::Router;
 use axum::http::{HeaderValue, header};
