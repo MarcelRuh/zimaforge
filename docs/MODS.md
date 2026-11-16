@@ -68,8 +68,10 @@ F.on("config", ({ id, config }) => { /* … */ })   // Ereignisse: ready, change
 
 // Widget-Spalte von ZimaOS (Uhr, System, Storage, Network …)
 F.dashboard.mountWidget(el, { after: "system" })  // einhängen und dort halten; gibt unmount() zurück
+F.dashboard.mountWidget(el, { before: "clock", pin: true })  // immer direkt über der Uhr
+F.dashboard.mountWidget(el, { after: ["clock", "system"], pin: true })  // unter der Uhr, sonst unter System
 F.dashboard.widgetColumn()        // Spalten-Element oder null
-F.dashboard.nativeWidget("storage")  // natives Widget-Element
+F.dashboard.nativeWidget("storage")  // natives Widget-Element: "clock", "system", "storage", "network"
 F.dashboard.watch(fn)             // fn bei jedem Umbau des Dashboards aufrufen
 F.dashboard.ignore(el)            // Änderungen in el lösen keinen Umbau-Alarm aus
 ```

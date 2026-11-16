@@ -37,20 +37,44 @@
     try { await F.setConfig(ID, { order }); } catch (err) { console.info("[Widget-Reihenfolge] nur lokal gespeichert:", err.message); }
   }
 
-  /** Bekannte Widgets in gespeicherte Reihenfolge bringen; unbekannte behalten ihren Platz. */
+  // Von Mods angeheftete Widgets (z. B. Pulse unter, Wetter über der Uhr) – ZimaForge
+  // hält sie an ihrem Anker; hier werden sie nicht sortiert und bekommen keinen Griff.
+  const isPinned = (el) => Boolean(el.dataset.zfPinBefore || el.dataset.zfPinAfter);
+  const anchorOf = (names) => {
+    for (const n of names.split(",")) {
+      const w = F.dashboard.nativeWidget(n);
+      if (w) return w;
+    }
+    return null;
+  };
+
+  /**
+   * Bekannte Widgets in gespeicherte Reihenfolge bringen; unbekannte behalten ihren Platz.
+   * Angeheftete Widgets werden danach wieder direkt vor bzw. hinter ihren Anker gesetzt.
+   */
   function restore(column) {
     if (!saved.length) return;
     const kids = [...column.children];
+    const free = kids.filter((el) => !isPinned(el));
     const rank = (el) => saved.indexOf(keyOf(el));
-    const known = kids.filter((el) => rank(el) >= 0).sort((a, b) => rank(a) - rank(b));
+    const known = free.filter((el) => rank(el) >= 0).sort((a, b) => rank(a) - rank(b));
     let i = 0;
-    const wanted = kids.map((el) => (rank(el) >= 0 ? known[i++] : el));
+    const ordered = free.map((el) => (rank(el) >= 0 ? known[i++] : el));
+    const wanted = [];
+    for (const el of ordered) {
+      for (const p of kids) if (isPinned(p) && p.dataset.zfPinBefore && anchorOf(p.dataset.zfPinBefore) === el) wanted.push(p);
+      wanted.push(el);
+      for (const p of kids) if (isPinned(p) && p.dataset.zfPinAfter && anchorOf(p.dataset.zfPinAfter) === el) wanted.push(p);
+    }
+    // Angeheftete ohne gefundenen Anker behalten ihren Platz vorne.
+    for (const p of kids) if (isPinned(p) && !wanted.includes(p)) wanted.unshift(p);
     if (wanted.every((el, idx) => el === kids[idx])) return;
     for (const el of wanted) column.append(el);
   }
 
   function addGrips(column) {
     for (const el of column.children) {
+      if (isPinned(el)) continue;
       if (el.querySelector(":scope > .zf-order-grip")) continue;
       el.classList.add("zf-order-item");
       const grip = document.createElement("button");
@@ -102,7 +126,8 @@
   }
 
   function persist(column) {
-    const order = [...column.children].map(keyOf).filter(Boolean);
+    // Angeheftete Widgets gehören nicht zur gespeicherten Reihenfolge.
+    const order = [...column.children].filter((el) => !isPinned(el)).map(keyOf).filter(Boolean);
     return save(order);
   }
 

@@ -33,7 +33,8 @@
   // Inhalt in einen inneren Container, damit Zusätze anderer Mods (z. B. Verschiebe-Griff) erhalten bleiben.
   const body = document.createElement("div");
   card.append(body);
-  F.dashboard.mountWidget(card, { after: "system" });
+  // Immer direkt über der Uhr (ohne Uhr: ganz oben).
+  F.dashboard.mountWidget(card, { before: "clock", pin: true });
 
   let config = null;
   let timer = null;

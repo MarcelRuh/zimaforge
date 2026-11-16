@@ -111,7 +111,8 @@
   try { setOpen(localStorage.getItem(OPEN_KEY) === "1"); } catch { setOpen(false); }
 
   // In die ZimaOS-Widget-Spalte direkt unter das native „System“-Widget.
-  F.dashboard.mountWidget(card, { after: "system" });
+  // Immer direkt unter der Uhr (ohne Uhr: unter „System“).
+  F.dashboard.mountWidget(card, { after: ["clock", "system"], pin: true });
 
   /* ───────── Apps: Container -> ZimaOS-App (Titel, Icon) ───────── */
 

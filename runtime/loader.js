@@ -189,16 +189,58 @@ function createDashboard() {
     return column;
   }
 
-  /** Direktes Kind der Spalte, das das native Widget `name` (system, storage, network) enthält. */
+  // Uhrzeit wie „22:05“, „9:41 PM“ oder „22:05:12“ – daran erkennt ZimaForge das Uhr-Widget.
+  const TIME = /^\d{1,2}:\d{2}(:\d{2})?(\s?[ap]\.?m\.?)?$/i;
+
+  /** Direktes Kind der Spalte mit dem Uhr-Widget (erkennbar an der angezeigten Uhrzeit). */
+  function clockWidget(col) {
+    for (const child of col.children) {
+      if (isOwn(child)) continue;
+      for (const el of child.querySelectorAll("span, div, p, h1, h2, h3, h4, time")) {
+        if (!el.childElementCount && TIME.test((el.textContent || "").trim())) return child;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Direktes Kind der Spalte mit dem nativen Widget `name`:
+   * "clock" (Uhr), "system", "storage", "network".
+   */
   function nativeWidget(name, col = widgetColumn()) {
     if (!col) return null;
     const cached = natives.get(name);
     if (cached?.isConnected && cached.parentElement === col) return cached;
-    const names = TITLES[name] ?? [String(name).toLowerCase()];
-    let node = titleElements(col).find((t) => names.includes(t.textContent.trim().toLowerCase()));
-    while (node && node.parentElement !== col) node = node.parentElement;
+    let node = null;
+    if (name === "clock") {
+      node = clockWidget(col);
+    } else {
+      const names = TITLES[name] ?? [String(name).toLowerCase()];
+      node = titleElements(col).find((t) => names.includes(t.textContent.trim().toLowerCase())) ?? null;
+      while (node && node.parentElement !== col) node = node.parentElement;
+    }
     if (node) natives.set(name, node);
-    return node || null;
+    return node;
+  }
+
+  // Erstes vorhandene native Widget aus einer Liste von Namen, z. B. ["clock", "system"].
+  const firstNative = (names, col) => {
+    for (const n of [].concat(names ?? [])) {
+      const w = nativeWidget(n, col);
+      if (w) return w;
+    }
+    return null;
+  };
+
+  /** Steht `el` schon am gewünschten Platz neben seinem Anker? */
+  function inPlace(el, opts, col) {
+    if (el.parentElement !== col) return false;
+    if (!opts.pin) return true; // nicht angeheftet: Nutzer darf umsortieren
+    const before = opts.before ? firstNative(opts.before, col) : null;
+    if (before) return el.nextElementSibling === before;
+    const after = opts.after ? firstNative(opts.after, col) : null;
+    if (after) return el.previousElementSibling === after;
+    return true;
   }
 
   function place(el, opts) {
@@ -206,11 +248,11 @@ function createDashboard() {
     if (col) {
       el.classList.add("zf-widget-embedded");
       el.classList.remove("zf-widget-floating");
-      // Schon in der Spalte: Position nicht erzwingen (Nutzer darf umsortieren).
-      if (el.parentElement === col) return;
-      const anchor = opts.after ? nativeWidget(opts.after, col) : null;
-      const wanted = anchor ? anchor.nextSibling : opts.position === "end" ? null : col.firstChild;
-      col.insertBefore(el, wanted);
+      if (inPlace(el, opts, col)) return;
+      const before = opts.before ? firstNative(opts.before, col) : null;
+      const after = !before && opts.after ? firstNative(opts.after, col) : null;
+      const wanted = before ?? (after ? after.nextSibling : opts.position === "end" ? null : col.firstChild);
+      if (wanted !== el) col.insertBefore(el, wanted);
     } else if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
       el.classList.remove("zf-widget-embedded");
       el.classList.add("zf-widget-floating");
@@ -238,7 +280,7 @@ function createDashboard() {
       // Nur reagieren, wenn es die Spalte betrifft – Uhr-Ticks, Messwerte und
       // Änderungen in eingehängten Widgets lösen nichts aus.
       if (!columnValid()) return refresh();
-      for (const el of registrations.keys()) if (el.parentElement !== column) return refresh();
+      for (const [el, opts] of registrations) if (!inPlace(el, opts, column)) return refresh();
       for (const r of records) if (r.target === column) return refresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
@@ -250,13 +292,22 @@ function createDashboard() {
     /** Alle direkten Kinder der Widget-Spalte (native und eingehängte Widgets). */
     widgets: () => [...(widgetColumn()?.children ?? [])],
     /**
-     * Hängt `el` in die Widget-Spalte (nach `after`: "system" | "storage" | "network",
+     * Hängt `el` in die Widget-Spalte – vor `before` bzw. nach `after` (Name oder Liste
+     * von Namen: "clock", "system", "storage", "network"; der erste vorhandene zählt),
+     * sonst oben bzw. mit `position: "end"` unten. Mit `pin: true` rückt das Widget
+     * bei jedem Umbau wieder an diesen Platz; sonst darf der Nutzer es verschieben.
+     * Bleibt dort, wenn ZimaOS neu rendert.| "storage" | "network",
      * sonst oben bzw. mit `position: "end"` unten) und hält es dort, wenn ZimaOS neu
      * rendert. Ohne Spalte landet es schwebend im Body (Klasse `zf-widget-floating`).
      * Gibt eine Funktion zum Entfernen zurück.
      */
     mountWidget(el, opts = {}) {
       own.add(el);
+      // Angeheftete Widgets markieren – „Widget-Reihenfolge“ lässt sie an ihrem Anker.
+      if (opts.pin) {
+        if (opts.before) el.dataset.zfPinBefore = [].concat(opts.before).join(",");
+        else if (opts.after) el.dataset.zfPinAfter = [].concat(opts.after).join(",");
+      }
       registrations.set(el, opts);
       place(el, opts);
       observe();
