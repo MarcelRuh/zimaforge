@@ -144,6 +144,8 @@ pub struct ModInfo {
     pub styles: Vec<String>,
     pub module: bool,
     pub format: Format,
+    /// Änderungsstempel (neueste Änderungszeit der Mod-Dateien, Sekunden) – für den Browser-Cache.
+    pub rev: u64,
     /// Im Manifest vorgesehen (`enabled`), unabhängig vom Benutzerschalter.
     #[serde(skip)]
     pub manifest_enabled: bool,
@@ -212,8 +214,27 @@ pub fn read_mod(dir: &Path) -> Result<Option<ModInfo>, ModError> {
         styles,
         module: manifest.module,
         format,
+        rev: newest_mtime(dir),
         manifest_enabled: manifest.enabled,
     }))
+}
+
+/// Neueste Änderungszeit aller Dateien eines Mod-Ordners (rekursiv, in Sekunden).
+fn newest_mtime(dir: &Path) -> u64 {
+    let mut newest = 0;
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        for e in fs::read_dir(&d).into_iter().flatten().flatten() {
+            let Ok(meta) = e.metadata() else { continue };
+            if meta.is_dir() {
+                stack.push(e.path());
+            } else if let Ok(t) = meta.modified() {
+                let secs = t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs());
+                newest = newest.max(secs);
+            }
+        }
+    }
+    newest
 }
 
 fn parse_manifest(path: &Path) -> Result<Manifest, ModError> {

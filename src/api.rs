@@ -5,13 +5,14 @@
 use axum::Json;
 use axum::Router;
 use axum::body::{Body, Bytes};
-use axum::extract::{DefaultBodyLimit, Path, State};
+use axum::extract::{DefaultBodyLimit, Path, Query, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post, put};
 use rust_embed::RustEmbed;
 use serde::Deserialize;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 use crate::auth::AuthError;
 use crate::mods::{self, ModError};
@@ -182,42 +183,82 @@ async fn session(State(state): State<AppState>, headers: HeaderMap) -> ApiResult
     Ok(no_store(json!({ "authenticated": true })))
 }
 
-fn asset_response(bytes: impl Into<Body>, path: &str) -> Response {
+/// Ob die URL eine Version trägt (`?v=…`) – dann ändert sich der Inhalt unter
+/// dieser URL nie, und der Browser darf dauerhaft cachen.
+#[derive(Deserialize, Default)]
+struct AssetQuery {
+    v: Option<String>,
+}
+
+/// Liefert eine Datei mit passendem Typ und Cache-Verhalten aus:
+/// mit Version `immutable`, sonst ETag und `304 Not Modified` bei unverändertem Inhalt.
+fn asset_response(bytes: Vec<u8>, path: &str, versioned: bool, request: &HeaderMap) -> Response {
+    let etag = format!("\"{}\"", &hex::encode(Sha256::digest(&bytes))[..16]);
+    let not_modified = !versioned
+        && request
+            .get(header::IF_NONE_MATCH)
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|v| v.split(',').any(|t| t.trim() == etag));
+    let mut resp = if not_modified {
+        StatusCode::NOT_MODIFIED.into_response()
+    } else {
+        Response::new(Body::from(bytes))
+    };
     let mime = mime_guess::from_path(path).first_or_octet_stream();
-    let mut resp = Response::new(bytes.into());
     let h = resp.headers_mut();
     h.insert(
         header::CONTENT_TYPE,
         HeaderValue::from_str(mime.as_ref()).unwrap_or(HeaderValue::from_static("application/octet-stream")),
     );
-    h.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-cache"));
+    h.insert(
+        header::CACHE_CONTROL,
+        // Im Debug-Build nie dauerhaft cachen, damit Änderungen sofort sichtbar sind.
+        HeaderValue::from_static(if versioned && !cfg!(debug_assertions) {
+            "public, max-age=31536000, immutable"
+        } else {
+            "no-cache"
+        }),
+    );
+    if let Ok(v) = HeaderValue::from_str(&etag) {
+        h.insert(header::ETAG, v);
+    }
     h.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
     resp
 }
 
-async fn runtime_asset(Path(path): Path<String>) -> Response {
+async fn runtime_asset(Path(path): Path<String>, Query(q): Query<AssetQuery>, headers: HeaderMap) -> Response {
     match Runtime::get(&path) {
-        Some(file) if mods::valid_asset_path(&path) => asset_response(file.data.into_owned(), &path),
+        Some(file) if mods::valid_asset_path(&path) => {
+            asset_response(file.data.into_owned(), &path, q.v.is_some(), &headers)
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn catalog_asset(State(state): State<AppState>, Path((id, path)): Path<(String, String)>) -> Response {
-    let Some(file) = state.store.catalog_asset_path(&id, &path) else {
+async fn file_asset(file: Option<std::path::PathBuf>, path: &str, q: AssetQuery, headers: &HeaderMap) -> Response {
+    let Some(file) = file else {
         return StatusCode::NOT_FOUND.into_response();
     };
     match tokio::fs::read(&file).await {
-        Ok(bytes) => asset_response(bytes, &path),
+        Ok(bytes) => asset_response(bytes, path, q.v.is_some(), headers),
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-async fn mod_asset(State(state): State<AppState>, Path((id, path)): Path<(String, String)>) -> Response {
-    let Some(file) = state.store.asset_path(&id, &path) else {
-        return StatusCode::NOT_FOUND.into_response();
-    };
-    match tokio::fs::read(&file).await {
-        Ok(bytes) => asset_response(bytes, &path),
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
-    }
+async fn catalog_asset(
+    State(state): State<AppState>,
+    Path((id, path)): Path<(String, String)>,
+    Query(q): Query<AssetQuery>,
+    headers: HeaderMap,
+) -> Response {
+    file_asset(state.store.catalog_asset_path(&id, &path), &path, q, &headers).await
+}
+
+async fn mod_asset(
+    State(state): State<AppState>,
+    Path((id, path)): Path<(String, String)>,
+    Query(q): Query<AssetQuery>,
+    headers: HeaderMap,
+) -> Response {
+    file_asset(state.store.asset_path(&id, &path), &path, q, &headers).await
 }

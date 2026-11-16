@@ -135,52 +135,82 @@ function createDashboard() {
     settings: ["widget settings", "widget-einstellungen"],
   };
   const ALL = Object.values(TITLES).flat();
-  const own = new Set(); // von Mods eingehängte Elemente
+  const own = new Set(); // von Mods eingehängte oder ignorierte Elemente
   const registrations = new Map(); // Element -> Optionen
 
-  const isOwn = (el) => [...own].some((o) => o.contains(el));
+  // Zwischenspeicher: Die Spalte wird nur neu gesucht, wenn die gemerkte ungültig ist.
+  let column = null;
+  let columnTitles = [];
+  let lastFullScan = 0;
+  const natives = new Map(); // Name -> direktes Kind der Spalte
 
-  function titleElements(root = document) {
+  const isOwn = (el) => {
+    for (const o of own) if (o.contains(el)) return true;
+    return false;
+  };
+
+  function titleElements(root) {
     const out = [];
     for (const el of root.querySelectorAll("span, div, p, h1, h2, h3, h4")) {
-      if (el.childElementCount || isOwn(el)) continue;
+      if (el.childElementCount) continue;
       const text = (el.textContent || "").trim().toLowerCase();
-      if (ALL.includes(text) && el.getClientRects().length) out.push(el);
+      if (ALL.includes(text) && !isOwn(el) && el.getClientRects().length) out.push(el);
     }
     return out;
   }
 
-  /** Kleinster gemeinsamer Vorfahr von mindestens zwei nativen Widget-Titeln. */
+  // Billig: Spalte noch im Dokument und noch mindestens zwei ihrer Titel darin?
+  const columnValid = () =>
+    Boolean(column?.isConnected) && columnTitles.filter((t) => t.isConnected && column.contains(t)).length >= 2;
+
+  /** Kleinster gemeinsamer Vorfahr von mindestens zwei nativen Widget-Titeln (gemerkt). */
   function widgetColumn() {
-    const titles = titleElements();
+    if (columnValid()) return column;
+    // Volle Suche höchstens einmal pro Sekunde (z. B. auf der Login-Seite ohne Spalte).
+    const now = performance.now();
+    if (!column && now - lastFullScan < 1000) return null;
+    lastFullScan = now;
+    column = null;
+    columnTitles = [];
+    natives.clear();
+    const titles = titleElements(document);
     if (titles.length < 2) return null;
     for (let node = titles[0].parentElement; node && node !== document.body; node = node.parentElement) {
-      if (titles.filter((t) => node.contains(t)).length < 2) continue;
+      const inside = titles.filter((t) => node.contains(t));
+      if (inside.length < 2) continue;
       const r = node.getBoundingClientRect();
       const inDialog = node.closest('[role="dialog"], [aria-modal="true"]');
-      return r.width >= 200 && r.width <= 560 && !inDialog ? node : null;
+      if (r.width >= 200 && r.width <= 560 && !inDialog) {
+        column = node;
+        columnTitles = inside;
+      }
+      break;
     }
-    return null;
+    return column;
   }
 
   /** Direktes Kind der Spalte, das das native Widget `name` (system, storage, network) enthält. */
-  function nativeWidget(name, column = widgetColumn()) {
-    if (!column) return null;
+  function nativeWidget(name, col = widgetColumn()) {
+    if (!col) return null;
+    const cached = natives.get(name);
+    if (cached?.isConnected && cached.parentElement === col) return cached;
     const names = TITLES[name] ?? [String(name).toLowerCase()];
-    let node = titleElements(column).find((t) => names.includes(t.textContent.trim().toLowerCase()));
-    while (node && node.parentElement !== column) node = node.parentElement;
+    let node = titleElements(col).find((t) => names.includes(t.textContent.trim().toLowerCase()));
+    while (node && node.parentElement !== col) node = node.parentElement;
+    if (node) natives.set(name, node);
     return node || null;
   }
 
   function place(el, opts) {
-    const column = widgetColumn();
-    if (column) {
+    const col = widgetColumn();
+    if (col) {
       el.classList.add("zf-widget-embedded");
       el.classList.remove("zf-widget-floating");
-      const anchor = opts.after ? nativeWidget(opts.after, column) : null;
-      const wanted = anchor ? anchor.nextSibling : opts.position === "end" ? null : column.firstChild;
       // Schon in der Spalte: Position nicht erzwingen (Nutzer darf umsortieren).
-      if (el.parentElement !== column) column.insertBefore(el, wanted);
+      if (el.parentElement === col) return;
+      const anchor = opts.after ? nativeWidget(opts.after, col) : null;
+      const wanted = anchor ? anchor.nextSibling : opts.position === "end" ? null : col.firstChild;
+      col.insertBefore(el, wanted);
     } else if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
       el.classList.remove("zf-widget-embedded");
       el.classList.add("zf-widget-floating");
@@ -194,16 +224,22 @@ function createDashboard() {
     pending = true;
     setTimeout(() => {
       pending = false;
+      const before = column;
       for (const [el, opts] of registrations) place(el, opts);
-      emit("dashboard", { column: widgetColumn() });
-    }, 300);
+      const col = widgetColumn();
+      emit("dashboard", { column: col, changed: col !== before });
+    }, 250);
   };
+
   let observer = null;
   const observe = () => {
     if (observer || !document.body) return;
     observer = new MutationObserver((records) => {
-      if (records.every((r) => isOwn(r.target))) return;
-      refresh();
+      // Nur reagieren, wenn es die Spalte betrifft – Uhr-Ticks, Messwerte und
+      // Änderungen in eingehängten Widgets lösen nichts aus.
+      if (!columnValid()) return refresh();
+      for (const el of registrations.keys()) if (el.parentElement !== column) return refresh();
+      for (const r of records) if (r.target === column) return refresh();
     });
     observer.observe(document.body, { childList: true, subtree: true });
   };
@@ -230,9 +266,12 @@ function createDashboard() {
         el.remove();
       };
     },
-    /** Meldet ZimaForge, dass Änderungen in `el` keine Neuplatzierung auslösen sollen. */
+    /** Meldet ZimaForge, dass `el` zu einem Mod gehört (wird bei der Titelsuche übersprungen). */
     ignore(el) { own.add(el); },
-    /** Ruft `fn({ column })` auf, sobald ZimaOS die Seite umbaut. Gibt eine Abmeldefunktion zurück. */
+    /**
+     * Ruft `fn({ column, changed })` auf, wenn sich die Widget-Spalte ändert (neue oder
+     * entfernte Widgets, neu aufgebaute Spalte). Gibt eine Abmeldefunktion zurück.
+     */
     watch(fn) {
       observe();
       if (!listeners.has("dashboard")) listeners.set("dashboard", new Set());
@@ -268,12 +307,12 @@ function addFontFace() {
   if (document.getElementById("zimaforge-fonts")) return;
   const style = document.createElement("style");
   style.id = "zimaforge-fonts";
-  style.textContent = `@font-face{font-family:"ZF Orbitron";src:url("${BASE}/runtime/fonts/Orbitron-Variable.ttf") format("truetype");font-weight:400 900;font-display:swap}`;
+  style.textContent = `@font-face{font-family:"ZF Orbitron";src:url("${BASE}/runtime/fonts/Orbitron-Variable.ttf?v=${encodeURIComponent(VERSION)}") format("truetype");font-weight:400 900;font-display:swap}`;
   document.head.append(style);
 }
 
 function loadStyle(mod, rel) {
-  const href = `${ZimaForge.assetUrl(mod.id, rel)}?v=${encodeURIComponent(mod.version)}`;
+  const href = `${ZimaForge.assetUrl(mod.id, rel)}?v=${encodeURIComponent(`${mod.version}-${mod.rev ?? 0}`)}`;
   if (document.querySelector(`link[href="${CSS.escape(href)}"]`)) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
@@ -283,7 +322,7 @@ function loadStyle(mod, rel) {
 }
 
 function loadScript(mod, rel) {
-  const src = `${ZimaForge.assetUrl(mod.id, rel)}?v=${encodeURIComponent(mod.version)}`;
+  const src = `${ZimaForge.assetUrl(mod.id, rel)}?v=${encodeURIComponent(`${mod.version}-${mod.rev ?? 0}`)}`;
   if (document.querySelector(`script[src="${CSS.escape(src)}"]`)) return;
   const script = document.createElement("script");
   if (mod.module) script.type = "module";

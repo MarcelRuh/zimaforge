@@ -413,12 +413,14 @@
   let lastWatts = null;
   let timer = null;
   let busy = false;
+  let detailTick = 0;
 
   async function tick() {
     if (busy) return;
     busy = true;
     try {
-      const wantDetail = !details.hidden;
+      // Details (Prozess-Scan auf dem Server) nur jeden zweiten Takt, also alle 6 s.
+      const wantDetail = !details.hidden && (!detail || ++detailTick % 2 === 0);
       const [z, m, s] = await Promise.all([
         zimaUtilization(),
         F.metrics().catch(() => null),

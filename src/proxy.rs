@@ -101,8 +101,11 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
             .headers
             .insert(header::CONNECTION, HeaderValue::from_static("upgrade"));
     }
-    // Unkomprimiert anfordern, damit HTML verändert werden kann (lokale Strecke).
-    parts.headers.remove(header::ACCEPT_ENCODING);
+    // Nur Seitenaufrufe (HTML) unkomprimiert anfordern, damit der Loader eingefügt
+    // werden kann. Alles andere (JS, CSS, Bilder, API) bleibt komprimiert.
+    if is_document_request(&parts.headers) {
+        parts.headers.remove(header::ACCEPT_ENCODING);
+    }
     if let Some(host) = parts.headers.get(header::HOST).cloned() {
         parts.headers.insert("x-forwarded-host", host);
     }
@@ -178,6 +181,17 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
     }
 
     Response::from_parts(parts, Body::new(body))
+}
+
+/// Seitenaufruf des Browsers: `Sec-Fetch-Dest: document`, sonst `Accept` mit `text/html`.
+fn is_document_request(headers: &HeaderMap) -> bool {
+    if let Some(dest) = headers.get("sec-fetch-dest").and_then(|v| v.to_str().ok()) {
+        return dest.eq_ignore_ascii_case("document") || dest.eq_ignore_ascii_case("iframe");
+    }
+    headers
+        .get(header::ACCEPT)
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|a| a.to_ascii_lowercase().contains("text/html"))
 }
 
 fn should_inject(status: StatusCode, headers: &HeaderMap) -> bool {

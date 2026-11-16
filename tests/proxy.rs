@@ -157,13 +157,12 @@ mod reqwest_lite {
                 .unwrap();
             let status = resp.status();
             let headers = resp.headers().clone();
-            let body = String::from_utf8(resp.into_body().collect().await.unwrap().to_bytes().to_vec()).unwrap();
+            let body = String::from_utf8_lossy(&resp.into_body().collect().await.unwrap().to_bytes()).into_owned();
             Resp { status, headers, body }
         }
 
         pub async fn get(&self, url: &str) -> Resp {
-            self.send(Method::GET, url, &[("accept-encoding", "gzip, br")], "")
-                .await
+            self.send(Method::GET, url, &[], "").await
         }
     }
 }
@@ -187,10 +186,28 @@ async fn injects_loader_into_dashboard_html() {
 #[tokio::test]
 async fn passes_api_calls_through_with_forward_headers() {
     let f = forge().await;
-    let r = f.http.get(&f.url("/v1/sys/echo")).await;
+    // zstd: kommt beim Upstream an, ZimaForge selbst komprimiert damit aber nicht.
+    let r = f
+        .http
+        .send(Method::GET, &f.url("/v1/sys/echo"), &[("accept-encoding", "zstd")], "")
+        .await;
     assert_eq!(r.status, StatusCode::OK);
     let v: serde_json::Value = serde_json::from_str(&r.body).unwrap();
-    assert_eq!(v["acceptEncoding"], false, "Accept-Encoding muss entfernt werden");
+    assert_eq!(v["acceptEncoding"], true, "API-Aufrufe bleiben komprimierbar");
+    let doc = f
+        .http
+        .send(
+            Method::GET,
+            &f.url("/v1/sys/echo"),
+            &[("accept-encoding", "zstd"), ("sec-fetch-dest", "document")],
+            "",
+        )
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&doc.body).unwrap();
+    assert_eq!(
+        v["acceptEncoding"], false,
+        "Seitenaufrufe unkomprimiert für die Loader-Injection"
+    );
     assert_eq!(v["forwardedHost"], f.addr.to_string());
     assert_eq!(v["forwardedPort"], "8077", "Port aus der ZimaForge-Konfiguration");
     assert_eq!(v["realIp"], "127.0.0.1");
@@ -382,4 +399,38 @@ async fn serves_runtime_and_health() {
     let h: serde_json::Value = serde_json::from_str(&f.http.get(&f.url("/_forge/api/health")).await.body).unwrap();
     assert_eq!(h["status"], "ok");
     assert!(h["upstream"].as_str().unwrap().starts_with("http://127.0.0.1:"));
+}
+
+#[tokio::test]
+async fn compresses_own_assets_and_supports_etags() {
+    let f = forge().await;
+    let url = f.url("/_forge/runtime/store.js?v=1");
+    let r = f.http.send(Method::GET, &url, &[("accept-encoding", "gzip")], "").await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.headers.get(header::CONTENT_ENCODING).unwrap(), "gzip");
+
+    let r = f.http.get(&f.url("/_forge/runtime/loader.js")).await;
+    let etag = r.headers.get(header::ETAG).unwrap().to_str().unwrap().to_owned();
+    let again = f
+        .http
+        .send(
+            Method::GET,
+            &f.url("/_forge/runtime/loader.js"),
+            &[("if-none-match", etag.as_str())],
+            "",
+        )
+        .await;
+    assert_eq!(again.status, StatusCode::NOT_MODIFIED);
+    assert!(again.body.is_empty());
+}
+
+#[tokio::test]
+async fn active_mods_carry_a_revision_stamp() {
+    let f = forge().await;
+    let auth = [("x-zimaforge", "1"), ("authorization", GOOD_TOKEN)];
+    f.http
+        .send(Method::POST, &f.url("/_forge/api/store/neon"), &auth, "")
+        .await;
+    let v: serde_json::Value = serde_json::from_str(&f.http.get(&f.url("/_forge/api/mods")).await.body).unwrap();
+    assert!(v["mods"][0]["rev"].as_u64().unwrap() > 0);
 }

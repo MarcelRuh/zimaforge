@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Performance
+- Proxy entfernt `Accept-Encoding` nur noch bei Seitenaufrufen (HTML, für die Loader-Injection). JS, CSS, Bilder und API-Antworten von ZimaOS kommen wieder komprimiert.
+- ZimaForge komprimiert eigene Antworten und die HTML-Seite mit Loader (gzip/Brotli, schnellste Stufe) – Loader, Store und API rund 60–70 % kleiner.
+- Browser-Cache: Dateien mit Version in der URL sind `immutable`, sonst ETag mit `304 Not Modified`. Mod-Dateien tragen einen Änderungsstempel (`rev`), damit Änderungen trotzdem sofort ankommen.
+- Widget-Spalte wird gemerkt statt bei jeder DOM-Änderung neu gesucht. Messung im Mock mit 100 Uhr-Ticks in 10 s: vorher 2352 Volldurchsuchungen und 6696 Layout-Abfragen, jetzt 0.
+- Forge Pulse holt die Detailwerte nur noch alle 6 s.
+
 ## [0.3.2] – 2026-11-16
 
 ### Behoben
