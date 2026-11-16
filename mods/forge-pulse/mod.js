@@ -283,8 +283,54 @@
     return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${el.className && typeof el.className === "string" ? `.${el.className.trim().split(/\s+/).join(".")}` : ""} @${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}`;
   }
 
+  /**
+   * Adresse von btop aus der Antwort von `POST /v2/zimaos/tty/btop`.
+   * Akzeptiert u. a. `{data: {port}}`, `{data: {url}}`, `{port}`, `{data: 32442}`.
+   */
+  function btopUrlFrom(body) {
+    const d = body?.data ?? body;
+    for (const c of [d?.url, d?.address, d?.link, typeof d === "string" ? d : null]) {
+      if (typeof c === "string" && /^https?:\/\//i.test(c)) {
+        const u = new URL(c);
+        // ZimaOS kennt sich selbst oft nur als localhost – Host des Browsers verwenden.
+        if (["127.0.0.1", "0.0.0.0", "localhost", "::1"].includes(u.hostname)) u.hostname = location.hostname;
+        return u.href;
+      }
+    }
+    const raw = d?.port ?? d?.Port ?? (typeof d === "number" || /^\d+$/.test(String(d ?? "")) ? d : null);
+    const port = num(raw);
+    return port && port > 0 && port < 65536 ? `${location.protocol}//${location.hostname}:${port}/` : null;
+  }
+
+  // Wie ☰ im ZimaOS-System-Widget: btop über ZimaOS starten (läuft über ZimaForge an den
+  // eingestellten ZimaOS-Port, ZIMAFORGE_UPSTREAM) und die Adresse mit dem neuen Port öffnen.
   async function openResourceMonitor() {
     note.hidden = true;
+    // Fenster sofort im Klick öffnen – nach dem await würde ein Popup-Blocker zuschlagen.
+    const win = window.open("", "_blank");
+    try {
+      const res = await fetch("/v2/zimaos/tty/btop", {
+        method: "POST",
+        headers: { Authorization: F.sessionToken(), Accept: "application/json" },
+        cache: "no-store",
+      });
+      const body = await res.json().catch(() => null);
+      const url = res.ok ? btopUrlFrom(body) : null;
+      if (url) {
+        if (win && !win.closed) win.location.href = url;
+        else window.open(url, "_blank");
+        return;
+      }
+      console.info("[Forge Pulse] btop: Antwort von /v2/zimaos/tty/btop ohne Port", res.status, body);
+    } catch (err) {
+      console.info("[Forge Pulse] btop: /v2/zimaos/tty/btop nicht erreichbar", err);
+    }
+    if (win && !win.closed) win.close();
+    await openViaNativeButton();
+  }
+
+  // Ausweg für ältere ZimaOS-Versionen: ☰ im nativen System-Widget anklicken.
+  async function openViaNativeButton() {
     const system = F.dashboard.nativeWidget("system");
     let menu = null;
     if (system) {

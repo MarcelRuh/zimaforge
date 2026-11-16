@@ -77,8 +77,14 @@ async function checkForUpdate(force = false) {
 }
 
 let settingsCache = null;
+let connection = null; // Antwort von /_forge/api/health (Ziel-Adresse von ZimaOS)
 async function loadSettings() {
   settingsCache = { ...DEFAULT_SETTINGS, ...((await F.getConfig(CORE_ID, {})) || {}) };
+  try {
+    connection = await (await fetch("/_forge/api/health", { cache: "no-store" })).json();
+  } catch {
+    connection = null;
+  }
   return settingsCache;
 }
 
@@ -349,6 +355,12 @@ class ForgeStore extends HTMLElement {
     const opt = (v, label) => `<option value="${v}" ${s.launcher === v ? "selected" : ""}>${label}</option>`;
     return `
       <div class="settings">
+        <section class="panel">
+          <h2>Verbindung</h2>
+          <p>ZimaForge läuft auf Port <b>${esc(connection?.port ?? location.port ?? "")}</b> und leitet an das ZimaOS-Dashboard unter
+          <code>${esc(connection?.upstream ?? "unbekannt")}</code> weiter. Darüber laufen auch btop und die App-Liste.</p>
+          <p class="hint">Ändern: In ZimaOS bei der App „ZimaForge“ die Umgebungsvariable <code>ZIMAFORGE_UPSTREAM</code> setzen, z. B. <code>http://127.0.0.1:8081</code>, wenn der ZimaOS-Port 8081 ist.</p>
+        </section>
         <section class="panel">
           <h2>Launcher</h2>
           <p>Das Sechseck-Symbol öffnet den Store. Unabhängig davon funktioniert immer <kbd>Alt</kbd> + <kbd>⇧</kbd> + <kbd>F</kbd>.</p>

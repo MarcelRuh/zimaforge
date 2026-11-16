@@ -381,4 +381,5 @@ async fn serves_runtime_and_health() {
     );
     let h: serde_json::Value = serde_json::from_str(&f.http.get(&f.url("/_forge/api/health")).await.body).unwrap();
     assert_eq!(h["status"], "ok");
+    assert!(h["upstream"].as_str().unwrap().starts_with("http://127.0.0.1:"));
 }

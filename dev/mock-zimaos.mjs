@@ -99,6 +99,12 @@ http
         { name: "aliasvault", title: { en_us: "AliasVault" } },
       ] }));
     }
+    if (url.pathname === "/v2/zimaos/tty/btop" && req.method === "POST") {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      // ZimaOS startet ttyd mit btop auf einem freien Port und meldet ihn zurück.
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ success: 200, message: "ok", data: { port: 31000 + Math.floor(Math.random() * 2000) } }));
+    }
     const containersMatch = url.pathname.match(/^\/v2\/app_management\/compose\/([^/]+)\/containers$/);
     if (containersMatch) {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }

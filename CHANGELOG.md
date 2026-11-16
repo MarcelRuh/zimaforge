@@ -8,6 +8,10 @@ Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](http
 - Update-Hinweis im Store blieb nach einem Update auf „Update verfügbar“ hängen. Gespeichert wird jetzt nur die neueste GitHub-Version; ob ein Update verfügbar ist, wird bei jeder Anzeige neu berechnet. Nach einem Versionswechsel wird sofort neu geprüft, sonst höchstens alle 2 Stunden.
 - Auch im Zustand „Update verfügbar“ gibt es jetzt den Knopf „Erneut prüfen“.
 
+### Geändert
+- Forge Pulse 2.4: ☰ startet btop direkt über ZimaOS (`POST /v2/zimaos/tty/btop`, läuft über ZimaForge an den eingestellten ZimaOS-Port) und öffnet die Adresse mit dem jeweils neuen Port. Das Fenster öffnet sofort im Klick, damit kein Popup-Blocker greift. Ausweg für ältere ZimaOS-Versionen: Klick auf ☰ im System-Widget.
+- Store-Einstellungen zeigen unter „Verbindung“, an welche ZimaOS-Adresse ZimaForge weiterleitet (`ZIMAFORGE_UPSTREAM`); `/_forge/api/health` liefert dafür `upstream` und `port`.
+
 ## [0.3.1] – 2026-11-16
 
 ### Geändert

@@ -285,6 +285,7 @@ h1 { margin: 8px 0 0; font: 800 26px/1.1 var(--display); letter-spacing: .06em; 
 .panel { padding: 18px; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface); }
 .panel h2 { margin: 0 0 8px; font: 700 13px/1 var(--display); letter-spacing: .16em; text-transform: uppercase; }
 .panel p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.panel code { overflow-wrap: anywhere; }
 .panel p:last-child { margin-bottom: 0; }
 .hint { font-size: 12px !important; color: var(--faint) !important; margin-top: 10px !important; }
 .field { display: grid; gap: 6px; max-width: 280px; font-size: 12px; color: var(--faint); font-weight: 600; }

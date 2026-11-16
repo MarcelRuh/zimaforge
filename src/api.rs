@@ -87,8 +87,15 @@ pub fn router() -> Router<AppState> {
         .route("/_forge/catalog/{id}/{*path}", get(catalog_asset))
 }
 
-async fn health() -> Response {
-    no_store(json!({ "status": "ok", "name": "ZimaForge", "version": crate::VERSION }))
+async fn health(State(state): State<AppState>) -> Response {
+    no_store(json!({
+        "status": "ok",
+        "name": "ZimaForge",
+        "version": crate::VERSION,
+        // Ziel des Proxys (ZIMAFORGE_UPSTREAM), z. B. http://127.0.0.1:8081 – für die Einstellungen.
+        "upstream": state.config.upstream.to_string().trim_end_matches('/'),
+        "port": state.config.listen.port(),
+    }))
 }
 
 async fn list_active(State(state): State<AppState>) -> ApiResult {
