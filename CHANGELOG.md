@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.4] – 2026-11-16
 
 ### Behoben
 - App-Icon in ZimaOS fehlte bei Installationen aus der Compose-Datei von v0.1.x (`assets/icon.svg` war mit dem neuen Logo entfernt worden). Die Datei ist zurück und enthält das neue Logo.
