@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Behoben
+- Forge Pulse 2.5.2: Mit beim letzten Mal aufgeklapptem Detailbereich schlug die erste Aktualisierung fehl („Cannot access 'busy' before initialization“).
+- Widgets ohne gefundene Widget-Spalte (z. B. auf der ZimaOS-Anmeldeseite) erscheinen nur noch schwebend, wenn eine ZimaOS-Sitzung besteht.
+
 ## [0.3.7] – 2026-11-17
 
 ### Behoben

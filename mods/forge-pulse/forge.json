@@ -1,6 +1,6 @@
 {
   "name": "Forge Pulse",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "System-Widget im Aufbau des ZimaOS-System-Widgets: Ringanzeigen für CPU und RAM, Leistungsaufnahme in Watt, Temperatur, RAM-Größe; aufklappbar mit Last, Netzwerk und Laufzeit. Sitzt direkt in der Widget-Spalte.",
   "category": "Widgets",
   "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],

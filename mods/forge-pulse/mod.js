@@ -95,7 +95,8 @@
     head.setAttribute("aria-expanded", String(open));
     card.classList.toggle("open", open);
     try { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); } catch { /* egal */ }
-    if (open) void tick();
+    // Erst nach dem Start des Skripts abfragen – tick() und seine Variablen stehen weiter unten.
+    if (open) setTimeout(() => void tick(), 0);
   };
   const setTab = (t) => {
     tab = TABS.some(([k]) => k === t) ? t : "cpu";

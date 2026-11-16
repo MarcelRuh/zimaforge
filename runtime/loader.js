@@ -312,6 +312,7 @@ function createDashboard() {
   function place(el, opts) {
     const col = widgetColumn();
     if (col) {
+      el.style.removeProperty("display");
       el.classList.add("zf-widget-embedded");
       el.classList.remove("zf-widget-floating");
       matchSpacing(el, col);
@@ -320,11 +321,17 @@ function createDashboard() {
       const after = !before && opts.after ? firstNative(opts.after, col) : null;
       const wanted = before ?? (after ? after.nextSibling : opts.position === "end" ? null : col.firstChild);
       if (wanted !== el) col.insertBefore(el, wanted);
-    } else if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
-      el.classList.remove("zf-widget-embedded");
-      el.classList.add("zf-widget-floating");
-      el.style.marginTop = el.style.marginBottom = "";
-      document.body.append(el);
+    } else {
+      // Ohne Widget-Spalte nur schwebend zeigen, wenn eine ZimaOS-Sitzung besteht –
+      // also nicht auf der Anmeldeseite.
+      const loggedIn = Boolean(sessionToken()) && !/login/i.test(location.hash + location.pathname);
+      el.style.display = loggedIn ? "" : "none";
+      if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
+        el.classList.remove("zf-widget-embedded");
+        el.classList.add("zf-widget-floating");
+        el.style.marginTop = el.style.marginBottom = "";
+        document.body.append(el);
+      }
     }
   }
 
