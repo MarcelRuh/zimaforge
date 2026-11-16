@@ -72,7 +72,8 @@ const page = `<!doctype html>
   const mon=document.getElementById("monitor");
   mon.onclick=(e)=>{if(e.target===mon)mon.hidden=true};
   document.querySelector("#sys .chev").onclick=()=>{const t=document.querySelector("#sys .tabs");t.hidden=!t.hidden};
-  document.querySelector("#sys .menu").addEventListener("click",()=>{mon.hidden=false});
+  // Wie ZimaOS: btop über ttyd auf wechselndem Port in neuem Tab.
+  document.querySelector("#sys .menu").addEventListener("click",()=>{window.open(location.protocol+"//"+location.hostname+":"+(31000+Math.floor(Math.random()*2000))+"/","_blank")});
   // Wie ZimaOS: Kachel öffnet die Web-URL der App (Host + port_map + index) in einem neuen Tab.
   const urls={ZimaForge:"8077/?forge",Jellyfin:"8096/"};
   document.querySelectorAll(".app").forEach(t=>t.onclick=()=>{
@@ -95,7 +96,18 @@ http
       return res.end(JSON.stringify({ data: [
         { name: "plex", title: { en_us: "Plex" }, icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Plex/icon.png" },
         { name: "immich", title: { en_us: "Immich" } },
+        { name: "aliasvault", title: { en_us: "AliasVault" } },
       ] }));
+    }
+    const containersMatch = url.pathname.match(/^\/v2\/app_management\/compose\/([^/]+)\/containers$/);
+    if (containersMatch) {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      // Wie CasaOS-AppManagement: data.containers = { <ID>: ContainerSummary }
+      const app = APPS.find(([n]) => n === decodeURIComponent(containersMatch[1]));
+      if (!app) { res.writeHead(404); return res.end(); }
+      const id = app[1].repeat(32);
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ data: { main: app[0], containers: { [id]: { ID: id, Name: app[0], Project: app[0], Service: app[0] } } } }));
     }
     if (url.pathname === "/v1/sys/utilization") {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }

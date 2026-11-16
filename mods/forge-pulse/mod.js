@@ -113,37 +113,72 @@
   // In die ZimaOS-Widget-Spalte direkt unter das native „System“-Widget.
   F.dashboard.mountWidget(card, { after: "system" });
 
-  /* ───────── App-Titel und Icons von ZimaOS (falls verfügbar) ───────── */
+  /* ───────── Apps: Container -> ZimaOS-App (Titel, Icon) ───────── */
 
-  let appMeta = null;
-  async function loadAppMeta() {
-    if (appMeta) return appMeta;
-    appMeta = new Map();
+  // ZimaOS-App-Verwaltung: App-Liste (Titel, Icon) und je App die Container-IDs.
+  let appIndex = null;
+  let appIndexAt = 0;
+  async function loadAppIndex() {
+    if (appIndex && Date.now() - appIndexAt < 5 * 60_000) return appIndex;
+    const map = new Map();
     const token = F.sessionToken();
-    if (!token) return appMeta;
-    try {
-      const res = await fetch("/v2/app_management/web/appgrid", { headers: { Authorization: token } });
-      if (!res.ok) return appMeta;
-      const list = (await res.json())?.data ?? [];
-      for (const a of Array.isArray(list) ? list : []) {
-        const title = typeof a.title === "object" ? a.title.de_de || a.title.en_us || Object.values(a.title)[0] : a.title;
-        if (a.name) appMeta.set(String(a.name).toLowerCase(), { title: title || a.name, icon: a.icon });
-      }
-    } catch { /* ohne Titel/Icons weiter */ }
-    return appMeta;
+    if (token) {
+      const opts = { headers: { Authorization: token } };
+      try {
+        const res = await fetch("/v2/app_management/web/appgrid", opts);
+        const grid = res.ok ? (await res.json())?.data ?? [] : [];
+        await Promise.all((Array.isArray(grid) ? grid : []).filter((a) => a?.name).map(async (a) => {
+          const t = a.title;
+          const title = (t && typeof t === "object" ? t.de_de || t.en_us || Object.values(t)[0] : t) || a.name;
+          const meta = { title, icon: a.icon || null };
+          map.set(`name:${String(a.name).toLowerCase()}`, meta);
+          try {
+            const r = await fetch(`/v2/app_management/compose/${encodeURIComponent(a.name)}/containers`, opts);
+            if (!r.ok) return;
+            const containers = (await r.json())?.data?.containers ?? {};
+            for (const [key, c] of Object.entries(containers)) {
+              const id = String(c?.ID ?? c?.Id ?? c?.id ?? key).toLowerCase();
+              if (/^[0-9a-f]{12,64}$/.test(id)) map.set(id.slice(0, 12), meta);
+            }
+          } catch { /* App ohne Container-Info */ }
+        }));
+      } catch { /* ohne ZimaOS-App-Liste */ }
+    }
+    appIndex = map;
+    appIndexAt = Date.now();
+    return map;
   }
-  void loadAppMeta();
+  void loadAppIndex();
 
-  const appRows = (apps, key) => {
-    if (!apps?.length) return '<p class="zf-pulse-muted">Keine App-Prozesse gefunden.</p>';
-    const sorted = [...apps].sort((a, b) => (key === "mem" ? b.memBytes - a.memBytes : b.cpuPercent - a.cpuPercent)).slice(0, 8);
-    const unnamed = apps.every((a) => /^[0-9a-f]{12}$/.test(a.name));
-    return `<ul class="zf-pulse-apps">${sorted.map((a) => {
-      const meta = appMeta?.get(a.name.toLowerCase());
-      const icon = meta?.icon ? `<img src="${esc(meta.icon)}" alt="" loading="lazy">` : `<span class="zf-pulse-app-dot">${esc(a.name[0]?.toUpperCase())}</span>`;
-      const value = key === "mem" ? fmtBytes(a.memBytes) : `${a.cpuPercent.toFixed(1)}%`;
-      return `<li>${icon}<span class="zf-pulse-app-name">${esc(meta?.title || a.name)}</span><b>${value}</b></li>`;
-    }).join("")}</ul>${unnamed ? '<p class="zf-pulse-muted">App-Namen fehlen: Docker-Ordner einbinden (siehe ZimaForge-Anleitung).</p>' : ""}`;
+  /** Verbrauch je ZimaOS-App: Container über die App-Verwaltung zuordnen und zusammenfassen. */
+  function groupApps(apps) {
+    const groups = new Map();
+    for (const a of apps ?? []) {
+      const meta = a.containers.map((id) => appIndex?.get(id)).find(Boolean)
+        ?? appIndex?.get(`name:${a.name.toLowerCase()}`)
+        ?? (/^[0-9a-f]{12}$/.test(a.name) ? null : { title: a.name, icon: null });
+      const key = meta?.title ?? "Sonstige Container";
+      const g = groups.get(key) ?? { title: key, icon: meta?.icon ?? null, cpu: 0, mem: 0, other: !meta };
+      g.cpu += a.cpuPercent;
+      g.mem += a.memBytes;
+      groups.set(key, g);
+    }
+    return [...groups.values()];
+  }
+
+  const appRows = (key) => {
+    const groups = groupApps(detail?.apps);
+    if (!groups.length) return '<p class="zf-pulse-muted">Keine laufenden Apps gefunden.</p>';
+    const total = detail?.mem?.total || 1;
+    const value = (g) => (key === "mem" ? (g.mem / total) * 100 : g.cpu);
+    const sorted = groups.sort((a, b) => (a.other - b.other) || value(b) - value(a));
+    return `<ul class="zf-pulse-apps">${sorted.map((g) => {
+      const icon = g.icon
+        ? `<img src="${esc(g.icon)}" alt="" loading="lazy">`
+        : `<span class="zf-pulse-app-dot">${esc(g.title[0]?.toUpperCase())}</span>`;
+      const tip = key === "mem" ? fmtBytes(g.mem) : `${g.cpu.toFixed(2)} % der gesamten CPU`;
+      return `<li title="${esc(tip)}">${icon}<span class="zf-pulse-app-name">${esc(g.title)}</span><b>${value(g).toFixed(1)}%</b></li>`;
+    }).join("")}</ul>`;
   };
 
   /* ───────── Tabs ───────── */
@@ -159,35 +194,11 @@
     const d = detail;
     let html = "";
     if (tab === "cpu") {
-      const temps = d.cpu.temps ?? [];
-      html += `<p class="zf-pulse-model">${esc(d.cpu.model || "CPU")}${d.cpu.mhz ? ` · ${(d.cpu.mhz / 1000).toFixed(1)} GHz` : ""}</p>`;
-      html += `<div class="zf-pulse-cores">${(d.cpu.cores ?? []).map((p, i) => `
-        <div class="zf-pulse-core"><span>C${i}</span>${bar(p, (p ?? 0) >= 85 ? "hot" : "")}<b>${p == null ? "–" : Math.round(p)}%</b></div>`).join("")}</div>`;
-      if (temps.length) {
-        html += `<div class="zf-pulse-temps">${temps.map((t) => `<span title="${esc(t.label)}">${esc(t.label.replace(/^Core /, "K"))} <b>${t.celsius.toFixed(0)}°</b></span>`).join("")}</div>`;
-      }
-      html += `<dl class="zf-pulse-list">
-        ${row("Leistung", gaugeData?.watts != null ? `${gaugeData.watts.toFixed(1)} W` : "nicht verfügbar")}
-        ${row("Temperatur (Paket)", d.cpu.packageTemp != null ? `${d.cpu.packageTemp.toFixed(1)} °C` : gaugeData?.temp != null ? `${gaugeData.temp.toFixed(1)} °C` : "–")}
-        ${row("Last (1 / 5 / 15)", gaugeData?.load ? gaugeData.load.map((l) => l.toFixed(2)).join(" / ") : "–")}
-        ${row("Laufzeit", fmtUptime(gaugeData?.uptime))}
-      </dl>`;
-      html += `<h4>Apps</h4>${appRows(d.apps, "cpu")}`;
+      // Wie im ZimaOS-System-Widget: nur die Apps mit ihrem CPU-Anteil.
+      html += appRows("cpu");
     } else if (tab === "mem") {
-      const m = d.mem;
-      const t = m.total || 1;
-      html += `<div class="zf-pulse-stack" title="belegt / Cache / frei">
-        <i class="used" style="width:${((m.used ?? 0) / t) * 100}%"></i>
-        <i class="cache" style="width:${Math.min(m.cached ?? 0, (m.available ?? 0)) / t * 100}%"></i></div>`;
-      html += `<dl class="zf-pulse-list">
-        ${row("Belegt", `${fmtBytes(m.used)} <small>${fmtPct((m.used / t) * 100, 0)}</small>`)}
-        ${row("Verfügbar", fmtBytes(m.available))}
-        ${row("Cache", fmtBytes(m.cached))}
-        ${row("Frei", fmtBytes(m.free))}
-        ${row("Gesamt", fmtBytes(m.total))}
-        ${row("Swap", m.swapTotal ? `${fmtBytes(m.swapUsed)} von ${fmtBytes(m.swapTotal)}` : "kein Swap")}
-      </dl>`;
-      html += `<h4>Apps</h4>${appRows(d.apps, "mem")}`;
+      // Wie im ZimaOS-System-Widget: nur die Apps mit ihrem RAM-Anteil.
+      html += appRows("mem");
     } else if (tab === "disk") {
       html += (d.disks ?? []).map((k) => `
         <div class="zf-pulse-disk"><div class="zf-pulse-row"><dt>${esc(k.label)}</dt><dd>${fmtBytes(k.used)} von ${fmtBytes(k.total)}</dd></div>
@@ -246,12 +257,39 @@
   // Nur ein click – weitere Zeiger-Ereignisse könnten Umschalter doppelt auslösen.
   const fire = (el) => el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
 
+  /** Wartet bis zu `ms`, ob ZimaOS ein Fenster öffnet (btop läuft über ttyd auf wechselndem Port). */
+  function watchWindowOpen(ms) {
+    const original = window.open;
+    let opened = null;
+    const watched = function (...args) {
+      opened = String(args[0] ?? "");
+      return original.apply(this, args);
+    };
+    window.open = watched;
+    return new Promise((resolve) => {
+      const started = Date.now();
+      const poll = setInterval(() => {
+        if (opened !== null || Date.now() - started > ms) {
+          clearInterval(poll);
+          if (window.open === watched) window.open = original;
+          resolve(opened);
+        }
+      }, 100);
+    });
+  }
+
+  function describe(el) {
+    const r = el.getBoundingClientRect();
+    return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ""}${el.className && typeof el.className === "string" ? `.${el.className.trim().split(/\s+/).join(".")}` : ""} @${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}×${Math.round(r.height)}`;
+  }
+
   async function openResourceMonitor() {
     note.hidden = true;
     const system = F.dashboard.nativeWidget("system");
+    let menu = null;
     if (system) {
       const findMenu = () => { const ram = leafWithText(system, "ram"); return ram ? iconRightOf(system, ram) : null; };
-      let menu = findMenu();
+      menu = findMenu();
       if (!menu) {
         // Natives Widget zugeklappt: Pfeil rechts neben „System“ anklicken.
         const title = leafWithText(system, "system");
@@ -261,12 +299,28 @@
           for (let i = 0; i < 12 && !menu; i++) { await sleep(120); menu = findMenu(); }
         }
       }
-      if (menu) { fire(menu); return; }
     }
-    note.textContent = "btop-Button von ZimaOS nicht gefunden. Details stehen in der Browser-Konsole.";
+    if (menu) {
+      // Wie ein Klick auf ☰ im System-Widget: ZimaOS startet btop und öffnet die Adresse.
+      const watching = watchWindowOpen(5000);
+      fire(menu);
+      const url = await watching;
+      if (url !== null) return;
+      note.textContent = "ZimaOS hat btop nicht geöffnet. Details stehen in der Browser-Konsole.";
+    } else {
+      note.textContent = "btop-Button von ZimaOS nicht gefunden. Details stehen in der Browser-Konsole.";
+    }
     note.hidden = false;
-    console.info("[Forge Pulse] ☰ nicht gefunden. System-Widget:", system ?? "(nicht gefunden)",
-      system ? system.outerHTML.slice(0, 4000) : "");
+    const ram = system && leafWithText(system, "ram");
+    console.info("[Forge Pulse] ☰ → btop fehlgeschlagen.", {
+      systemWidget: system ? describe(system) : "(nicht gefunden)",
+      ramTab: ram ? describe(ram) : "(nicht gefunden)",
+      angeklickt: menu ? describe(menu) : "(nichts)",
+      kandidaten: ram ? [...system.querySelectorAll("*")]
+        .filter((el) => visible(el) && Math.abs(el.getBoundingClientRect().top - ram.getBoundingClientRect().top) < 30)
+        .slice(0, 25).map(describe) : [],
+      html: system ? system.outerHTML.slice(0, 3000) : "",
+    });
   }
 
   /* ───────── Werte ───────── */
@@ -341,7 +395,7 @@
       if (s) {
         prevDetail = detail;
         detail = s;
-        await loadAppMeta();
+        await loadAppIndex();
         renderPane();
       }
     } finally {

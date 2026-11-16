@@ -40,7 +40,7 @@ Widgets hängen sich in die **Widget-Spalte von ZimaOS** ein. Damit liegen Fenst
 
 **Watt-Anzeige:** Die Leistung kommt aus dem RAPL-Energiezähler des Prozessors (`/sys/class/powercap/intel-rapl:*`, Intel und aktuelle AMD-Kernel). Sie misst die CPU-Pakete, nicht das ganze Gerät an der Steckdose. Gibt es keinen Zähler, zeigt Pulse nur die Temperatur.
 
-**App-Verbrauch in Forge Pulse:** ZimaForge ordnet Prozesse über die cgroups ihren Docker-Containern zu und fasst sie je App zusammen. Für lesbare App-Namen braucht es Lesezugriff auf die Container-Metadaten. Aktiviere dafür in der Compose-Datei den auskommentierten Block „Optional – App-Namen“. Vorher prüfst du per SSH den Pfad mit `docker info --format '{{.DockerRootDir}}'`; an das Ergebnis hängst du `/containers` an. Ohne diesen Block zeigt Pulse statt der Namen die Container-IDs.
+**App-Verbrauch in Forge Pulse:** ZimaForge ordnet Prozesse über die cgroups ihren Docker-Containern zu. Pulse fragt bei der ZimaOS-App-Verwaltung nach, welcher Container zu welcher App gehört, und zeigt die Apps mit Titel und Icon wie das System-Widget. Der optionale Docker-Block in der Compose-Datei wird dafür nicht gebraucht; er liefert nur Namen für Container, die keine ZimaOS-App sind.
 
 Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im Store aus.
 
