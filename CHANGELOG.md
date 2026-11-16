@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Neu
+- Widgets lassen sich an die Uhr heften: `mountWidget(el, { before | after: "clock", pin: true })`. Die Uhr erkennt ZimaForge an der angezeigten Uhrzeit.
+- Forge Pulse 2.5 sitzt immer direkt unter der Uhr, Forge Wetter 1.1 immer direkt darüber.
+- Widget-Reihenfolge 1.1 lässt angeheftete Widgets an ihrem Anker (kein Griff, nicht Teil der gespeicherten Reihenfolge).
+
 ## [0.3.4] – 2026-11-16
 
 ### Behoben
@@ -9,11 +16,6 @@ Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](http
 
 ### Geändert
 - Forge Pulse 2.4.2: Der RAM-Tab zeigt den Verbrauch je App in MB/GB statt in Prozent (Prozent im Tooltip).
-
-### Neu
-- Widgets lassen sich an die Uhr heften: `mountWidget(el, { before | after: "clock", pin: true })`. Die Uhr erkennt ZimaForge an der angezeigten Uhrzeit.
-- Forge Pulse 2.5 sitzt immer direkt unter der Uhr, Forge Wetter 1.1 immer direkt darüber.
-- Widget-Reihenfolge 1.1 lässt angeheftete Widgets an ihrem Anker (kein Griff, nicht Teil der gespeicherten Reihenfolge).
 
 ## [0.3.3] – 2026-11-16
 
