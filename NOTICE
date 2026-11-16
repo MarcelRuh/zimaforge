@@ -18,3 +18,11 @@ Schriftart
 
 Orbitron – Copyright 2018 The Orbitron Project Authors, SIL Open Font License 1.1
 (runtime/fonts/OFL.txt).
+
+Mods
+----
+
+Die mitgelieferten Mods sind eigenständige Umsetzungen für ZimaForge. Sie
+bieten teils ähnliche Funktionen wie Mods aus ZimaMOD/CasaMOD (Wetter,
+Widget-Sortierung, Schnee, Emoji-Cursor, Titel), enthalten aber keinen Code
+daraus. Wetterdaten: Open-Meteo (https://open-meteo.com/, CC BY 4.0).

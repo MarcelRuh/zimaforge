@@ -36,7 +36,7 @@ const safeUrl = (value) => {
   } catch { return ""; }
 };
 
-const LOGO = `<img class="logo" src="${F.runtimeUrl("logo.svg")}" alt="" width="40" height="40">`;
+const LOGO = `<img class="logo" src="${F.runtimeUrl("logo.png")}" alt="" width="40" height="40">`;
 
 function cmpVersion(a, b) {
   const pa = String(a).replace(/^v/, "").split(/[.-]/).map((x) => parseInt(x, 10) || 0);
@@ -83,7 +83,7 @@ class ForgeLauncher extends HTMLElement {
     root.innerHTML = `
       <link rel="stylesheet" href="${F.runtimeUrl("store.css")}">
       <button class="launcher" type="button" aria-label="ZimaForge Store öffnen (Alt+Umschalt+F)">
-        <img src="${F.runtimeUrl("logo.svg")}" alt="" width="30" height="30">
+        <img src="${F.runtimeUrl("logo.png")}" alt="" width="30" height="30">
         <span class="dot" hidden></span>
         <span class="tip">ZimaForge <kbd>Alt</kbd><kbd>⇧</kbd><kbd>F</kbd></span>
       </button>`;

@@ -1,0 +1,12 @@
+{
+  "name": "Forge Schnee",
+  "version": "1.0.0",
+  "description": "Leise fallender Schnee mit leichtem Neon-Schimmer über dem Dashboard. Klick-durchlässig, pausiert im Hintergrund-Tab und respektiert „Bewegung reduzieren“.",
+  "category": "Hintergrund",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/forge-snow" },
+  "tags": ["winter", "schnee", "animation"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": []
+}

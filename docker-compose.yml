@@ -24,7 +24,7 @@ services:
         target: /host/sys
         read_only: true
     labels:
-      icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.svg
+      icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.png
 
 x-casaos:
   architectures:
@@ -34,7 +34,7 @@ x-casaos:
   author: MarcelRuh
   developer: MarcelRuh
   category: Utilities
-  icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.svg
+  icon: https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.png
   index: /?forge
   port_map: "8077"
   scheme: http

@@ -1,20 +1,24 @@
-// Forge Pulse – Live-Systemwerte als schwebendes Widget.
+// Forge Pulse – System-Widget im Aufbau des ZimaOS-„System“-Widgets:
+// zwei Ringanzeigen (CPU, RAM), darunter Leistung/Temperatur und RAM-Größe.
+// Sitzt in der Widget-Spalte von ZimaOS; ohne Spalte als schwebende Karte.
 (() => {
   "use strict";
   const F = window.ZimaForge;
   if (!F || document.querySelector(".zf-pulse")) return;
 
-  const ID = "forge-pulse";
-  const POS_KEY = "zf-pulse:pos";
   const INTERVAL = 3000;
-  const HISTORY = 40;
+  const OPEN_KEY = "zf-pulse:details";
+  const ARC = 270; // Grad, unten offen
+  const R = 34;
+  const CIRC = 2 * Math.PI * R;
+  const ARC_LEN = (CIRC * ARC) / 360;
 
-  const fmtBytes = (b) => {
+  const fmtBytes = (b, digits = 1) => {
     if (b == null) return "–";
     const u = ["B", "KB", "MB", "GB", "TB"];
     let i = 0;
     while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-    return `${b.toFixed(b >= 100 || i === 0 ? 0 : 1)} ${u[i]}`;
+    return `${b.toFixed(i < 2 ? 0 : digits)} ${u[i]}`;
   };
   const fmtRate = (bps) => (bps == null ? "–" : `${fmtBytes(bps)}/s`);
   const fmtUptime = (s) => {
@@ -23,139 +27,86 @@
     return d ? `${d} T ${h} h` : h ? `${h} h ${m} min` : `${m} min`;
   };
 
-  const el = document.createElement("section");
-  el.className = "zf-pulse";
-  el.setAttribute("aria-label", "Forge Pulse – Systemwerte");
-  el.innerHTML = `
-    <header class="zf-pulse-head" title="Ziehen zum Verschieben">
-      <span class="zf-pulse-title"><i class="zf-pulse-led"></i>PULSE</span>
-      <button type="button" class="zf-pulse-toggle" aria-label="Einklappen" aria-expanded="true">–</button>
-    </header>
-    <div class="zf-pulse-body">
-      <div class="zf-pulse-row" data-k="cpu"><span>CPU</span><b>–</b><canvas width="120" height="26"></canvas></div>
-      <div class="zf-pulse-row" data-k="mem"><span>RAM</span><b>–</b><canvas width="120" height="26"></canvas></div>
-      <dl class="zf-pulse-facts">
-        <div><dt>Temp</dt><dd data-f="temp">–</dd></div>
-        <div><dt>Last</dt><dd data-f="load">–</dd></div>
-        <div><dt>↓ Netz</dt><dd data-f="rx">–</dd></div>
-        <div><dt>↑ Netz</dt><dd data-f="tx">–</dd></div>
-        <div class="wide"><dt>Laufzeit</dt><dd data-f="up">–</dd></div>
-      </dl>
+  const gauge = (key, label, from, to) => `
+    <div class="zf-pulse-gauge" data-k="${key}">
+      <svg viewBox="0 0 84 84" aria-hidden="true">
+        <defs><linearGradient id="zf-pulse-${key}" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="${from}"/><stop offset="1" stop-color="${to}"/>
+        </linearGradient></defs>
+        <circle class="zf-pulse-track" cx="42" cy="42" r="${R}"
+          stroke-dasharray="${ARC_LEN} ${CIRC}" transform="rotate(135 42 42)"/>
+        <circle class="zf-pulse-bar" cx="42" cy="42" r="${R}" stroke="url(#zf-pulse-${key})"
+          stroke-dasharray="0 ${CIRC}" transform="rotate(135 42 42)"/>
+      </svg>
+      <div class="zf-pulse-value"><b>–</b><small>%</small><span>${label}</span></div>
+      <div class="zf-pulse-sub" data-sub="${key}">–</div>
     </div>`;
-  document.body.append(el);
 
-  // Position (lokal je Browser) wiederherstellen.
-  try {
-    const pos = JSON.parse(localStorage.getItem(POS_KEY) || "null");
-    if (pos) {
-      el.style.left = `${Math.min(pos.x, innerWidth - 80)}px`;
-      el.style.top = `${Math.min(pos.y, innerHeight - 40)}px`;
-      el.style.right = "auto";
-      el.classList.toggle("collapsed", Boolean(pos.collapsed));
-    }
-  } catch { /* Standardposition */ }
+  const card = document.createElement("section");
+  card.className = "zf-pulse";
+  card.setAttribute("aria-label", "Forge Pulse – Systemwerte");
+  card.innerHTML = `
+    <button type="button" class="zf-pulse-head" aria-expanded="false" aria-controls="zf-pulse-details">
+      <span class="zf-pulse-title">Pulse</span>
+      <svg class="zf-pulse-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>
+    </button>
+    <div class="zf-pulse-gauges">
+      ${gauge("cpu", "CPU", "#00b4d8", "#8338ec")}
+      ${gauge("mem", "RAM", "#8338ec", "#ff006e")}
+    </div>
+    <dl class="zf-pulse-details" id="zf-pulse-details" hidden>
+      <div><dt>Last (1 min)</dt><dd data-f="load">–</dd></div>
+      <div><dt>Kerne</dt><dd data-f="cores">–</dd></div>
+      <div><dt>↓ Netzwerk</dt><dd data-f="rx">–</dd></div>
+      <div><dt>↑ Netzwerk</dt><dd data-f="tx">–</dd></div>
+      <div><dt>RAM belegt</dt><dd data-f="used">–</dd></div>
+      <div><dt>Laufzeit</dt><dd data-f="up">–</dd></div>
+    </dl>`;
 
-  const save = () => {
-    const r = el.getBoundingClientRect();
-    try {
-      localStorage.setItem(POS_KEY, JSON.stringify({ x: Math.round(r.left), y: Math.round(r.top), collapsed: el.classList.contains("collapsed") }));
-    } catch { /* egal */ }
+  const head = card.querySelector(".zf-pulse-head");
+  const details = card.querySelector(".zf-pulse-details");
+  const setOpen = (open) => {
+    details.hidden = !open;
+    head.setAttribute("aria-expanded", String(open));
+    card.classList.toggle("open", open);
+    try { localStorage.setItem(OPEN_KEY, open ? "1" : "0"); } catch { /* egal */ }
   };
+  head.addEventListener("click", () => setOpen(details.hidden));
+  try { setOpen(localStorage.getItem(OPEN_KEY) === "1"); } catch { setOpen(false); }
 
-  const toggle = el.querySelector(".zf-pulse-toggle");
-  const syncToggle = () => {
-    const c = el.classList.contains("collapsed");
-    toggle.textContent = c ? "+" : "–";
-    toggle.setAttribute("aria-expanded", String(!c));
-    toggle.setAttribute("aria-label", c ? "Ausklappen" : "Einklappen");
-  };
-  syncToggle();
-  toggle.addEventListener("click", () => { el.classList.toggle("collapsed"); syncToggle(); save(); });
+  // In die ZimaOS-Widget-Spalte direkt unter das native „System“-Widget.
+  F.dashboard.mountWidget(card, { after: "system" });
 
-  // Ziehen per Pointer Events.
-  const head = el.querySelector(".zf-pulse-head");
-  head.addEventListener("pointerdown", (e) => {
-    if (e.target.closest("button")) return;
-    const r = el.getBoundingClientRect();
-    const dx = e.clientX - r.left, dy = e.clientY - r.top;
-    head.setPointerCapture(e.pointerId);
-    el.classList.add("dragging");
-    const move = (ev) => {
-      el.style.left = `${Math.max(0, Math.min(innerWidth - r.width, ev.clientX - dx))}px`;
-      el.style.top = `${Math.max(0, Math.min(innerHeight - 40, ev.clientY - dy))}px`;
-      el.style.right = "auto";
-    };
-    const up = () => {
-      head.removeEventListener("pointermove", move);
-      el.classList.remove("dragging");
-      save();
-    };
-    head.addEventListener("pointermove", move);
-    head.addEventListener("pointerup", up, { once: true });
-    head.addEventListener("pointercancel", up, { once: true });
-  });
+  /* ───────── Werte ───────── */
 
-  const series = { cpu: [], mem: [] };
-  const colors = { cpu: ["#ff006e", "#8338ec"], mem: ["#00b4d8", "#8338ec"] };
-
-  function spark(key) {
-    const canvas = el.querySelector(`[data-k=${key}] canvas`);
-    const ctx = canvas.getContext("2d");
-    const dpr = devicePixelRatio || 1;
-    const w = 120, h = 26;
-    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; canvas.style.width = `${w}px`; canvas.style.height = `${h}px`; }
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-    const data = series[key];
-    if (data.length < 2) return;
-    const step = w / (HISTORY - 1);
-    const x0 = w - (data.length - 1) * step;
-    const y = (v) => h - 2 - (Math.max(0, Math.min(100, v)) / 100) * (h - 4);
-    const grad = ctx.createLinearGradient(0, 0, w, 0);
-    grad.addColorStop(0, colors[key][1]);
-    grad.addColorStop(1, colors[key][0]);
-    ctx.beginPath();
-    data.forEach((v, i) => (i ? ctx.lineTo(x0 + i * step, y(v)) : ctx.moveTo(x0, y(v))));
-    ctx.strokeStyle = grad;
-    ctx.lineWidth = 1.8;
-    ctx.shadowColor = colors[key][0];
-    ctx.shadowBlur = 6;
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-    ctx.lineTo(w, h);
-    ctx.lineTo(x0, h);
-    ctx.closePath();
-    const fill = ctx.createLinearGradient(0, 0, 0, h);
-    fill.addColorStop(0, `${colors[key][0]}40`);
-    fill.addColorStop(1, `${colors[key][0]}00`);
-    ctx.fillStyle = fill;
-    ctx.fill();
+  function setGauge(key, percent, sub) {
+    const g = card.querySelector(`[data-k=${key}]`);
+    const v = percent == null ? null : Math.max(0, Math.min(100, percent));
+    g.querySelector("b").textContent = v == null ? "–" : Math.round(v);
+    g.querySelector(".zf-pulse-bar").setAttribute("stroke-dasharray", `${v == null ? 0 : (ARC_LEN * v) / 100} ${CIRC}`);
+    g.classList.toggle("hot", v != null && v >= 85);
+    g.querySelector(".zf-pulse-sub").textContent = sub;
   }
 
-  function setRow(key, value) {
-    const row = el.querySelector(`[data-k=${key}]`);
-    row.querySelector("b").textContent = value == null ? "–" : `${Math.round(value)} %`;
-    row.classList.toggle("hot", value != null && value >= 85);
-    if (value != null) {
-      series[key].push(value);
-      if (series[key].length > HISTORY) series[key].shift();
-    }
-    spark(key);
-  }
-
-  const fact = (k, v) => { el.querySelector(`[data-f=${k}]`).textContent = v; };
+  const fact = (k, v) => { card.querySelector(`[data-f=${k}]`).textContent = v; };
   let prevNet = null;
   let timer = null;
 
   async function tick() {
     try {
       const m = await F.metrics();
-      setRow("cpu", m.cpuPercent);
-      setRow("mem", m.memPercent);
-      fact("temp", m.temperature == null ? "–" : `${m.temperature.toFixed(0)} °C`);
-      el.querySelector("[data-f=temp]").classList.toggle("hot", (m.temperature ?? 0) >= 80);
+      const cpuSub = [
+        m.powerWatts != null ? `${m.powerWatts.toFixed(1)} W` : null,
+        m.temperature != null ? `${m.temperature.toFixed(1)} °C` : null,
+      ].filter(Boolean).join(" / ") || "–";
+      setGauge("cpu", m.cpuPercent, cpuSub);
+      setGauge("mem", m.memPercent, m.memTotal ? fmtBytes(m.memTotal) : "–");
+
       fact("load", m.load ? m.load[0].toFixed(2) : "–");
+      fact("cores", m.cpuCores ?? "–");
       fact("up", fmtUptime(m.uptimeSeconds));
+      fact("used", m.memTotal && m.memAvailable != null
+        ? `${fmtBytes(m.memTotal - m.memAvailable)} von ${fmtBytes(m.memTotal)}` : "–");
       if (m.netRxBytes != null && prevNet) {
         const dt = (m.timestampMs - prevNet.t) / 1000;
         if (dt > 0) {
@@ -164,17 +115,14 @@
         }
       }
       if (m.netRxBytes != null) prevNet = { rx: m.netRxBytes, tx: m.netTxBytes, t: m.timestampMs };
-      el.classList.remove("offline");
-      el.querySelector(".zf-pulse-row[data-k=mem]").title =
-        m.memTotal ? `${fmtBytes(m.memTotal - m.memAvailable)} von ${fmtBytes(m.memTotal)}` : "";
+      card.classList.remove("offline");
     } catch {
-      el.classList.add("offline");
+      card.classList.add("offline");
     }
   }
 
-  function start() { if (!timer) { void tick(); timer = setInterval(tick, INTERVAL); } }
-  function stop() { clearInterval(timer); timer = null; }
+  const start = () => { if (!timer) { void tick(); timer = setInterval(tick, INTERVAL); } };
+  const stop = () => { clearInterval(timer); timer = null; };
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
   start();
-  console.info(`[${ID}] aktiv`);
 })();

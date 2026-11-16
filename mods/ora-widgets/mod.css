@@ -1,0 +1,23 @@
+/* ora Widgets – Neon-Rahmen und Glas-Look für die nativen ZimaOS-Widgets. */
+
+.zf-ora-widget {
+  position: relative;
+  border-radius: 12px !important;
+  outline: 1px solid #8338ec4d;
+  outline-offset: -1px;
+  box-shadow: 0 8px 28px #0000004d, 0 0 18px #8338ec1f !important;
+  transition: outline-color .2s, box-shadow .2s;
+}
+.zf-ora-widget:hover {
+  outline-color: #ff006e80;
+  box-shadow: 0 10px 32px #00000066, 0 0 24px #ff006e33 !important;
+}
+/* Dezenter Farbverlauf oben links wie bei Forge Pulse. */
+.zf-ora-widget::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(ellipse 70% 60% at 0% 0%, #8338ec1f, transparent 70%);
+}

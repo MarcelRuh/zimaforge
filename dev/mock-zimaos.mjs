@@ -22,28 +22,50 @@ const page = `<!doctype html>
     background:linear-gradient(160deg,#1b2b4a,#0d1424 55%,#1a1030)}
   .bar{display:flex;align-items:center;gap:12px;padding:14px 24px;background:#ffffff14;backdrop-filter:blur(10px)}
   .bar b{font-size:16px}.bar span{opacity:.7}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,140px);gap:18px;padding:40px 24px}
-  .app{height:140px;border-radius:16px;background:#ffffff1f;display:grid;place-items:center;text-align:center}
+  .layout{display:flex;gap:28px;padding:28px 24px}
+  .widgets{width:320px;flex:none;display:flex;flex-direction:column;min-height:520px}
+  .widget{border-radius:12px;background:#1b1d22b8;backdrop-filter:blur(12px);padding:14px 16px;margin-bottom:12px}
+  .widget .t{font-size:17px;font-weight:600;margin-bottom:10px}
+  .widget .row{opacity:.8;font-size:13px}
+  .grid{flex:1;display:grid;grid-template-columns:repeat(auto-fill,140px);gap:18px;align-content:start}
+  .app{height:140px;border-radius:16px;background:#ffffff1f;display:grid;place-items:center;text-align:center;cursor:pointer}
   .app i{display:block;width:56px;height:56px;margin:0 auto 10px;border-radius:14px;background:#3a86ff}
   #login{position:fixed;left:24px;bottom:24px;padding:8px 14px;border-radius:8px;border:0;cursor:pointer}
+  .modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#0008}
+  .modal[hidden]{display:none}
+  .modal section{width:min(900px,90vw);height:70vh;border-radius:16px;background:#f4f5f7;color:#222;padding:24px}
 </style></head>
 <body><div id="app">
   <div class="bar"><b>ZimaOS</b><span>Mock-Dashboard für ZimaForge</span></div>
-  <div class="grid">
-    ${["Files", "Photos", "Jellyfin", "Immich", "ZimaForge", "Settings"]
-      .map((n, i) => `<div class="app" data-app-name="${n}"><div><i style="background:hsl(${i * 55},70%,55%)"></i>${n}</div></div>`)
-      .join("")}
+  <div class="layout">
+    <aside class="widgets">
+      <div class="widget"><div class="t">Uhr</div><div class="row">20:15</div></div>
+      <div class="widget"><div class="t">System</div><div class="row">CPU 3 % · RAM 7 %</div></div>
+      <div class="widget"><div class="t">Storage</div><div class="row">1,2 TB frei</div></div>
+      <div class="widget"><div class="t">Network</div><div class="row">↓ 2 MB/s ↑ 300 KB/s</div></div>
+    </aside>
+    <div class="grid">
+      ${["App Store", "Files", "Jellyfin", "Immich", "ZimaForge", "Settings"]
+        .map((n, i) => `<div class="app" data-app-name="${n}"><div><i style="background:hsl(${i * 55},70%,55%)"></i>${n}</div></div>`)
+        .join("")}
+    </div>
   </div>
   <button id="login" type="button"></button>
+  <div class="modal" id="appstore" role="dialog" aria-modal="true" hidden>
+    <section><h2>App Store (Mock)</h2><p>Klick daneben schließt.</p></section>
+  </div>
 </div>
 <script>
   const b=document.getElementById("login");
   const sync=()=>b.textContent=localStorage.getItem("access_token")?"Abmelden (Mock)":"Anmelden (Mock)";
   b.onclick=()=>{localStorage.getItem("access_token")?localStorage.removeItem("access_token"):localStorage.setItem("access_token","${TOKEN}");sync()};
   sync();
+  const store=document.getElementById("appstore");
+  store.onclick=(e)=>{if(e.target===store)store.hidden=true};
   // Wie ZimaOS: Kachel öffnet die Web-URL der App (Host + port_map + index) in einem neuen Tab.
   const urls={ZimaForge:"8077/?forge",Jellyfin:"8096/"};
   document.querySelectorAll(".app").forEach(t=>t.onclick=()=>{
+    if(t.dataset.appName==="App Store"){store.hidden=false;return}
     const u=urls[t.dataset.appName]; if(u) window.open(location.protocol+"//"+location.hostname+":"+u,"_blank");
   });
 </script></body></html>`;

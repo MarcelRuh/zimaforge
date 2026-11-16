@@ -119,7 +119,128 @@ const ZimaForge = Object.freeze({
     await import(`./store.js?v=${encodeURIComponent(VERSION)}`);
     document.querySelector("zimaforge-store")?.open(view);
   },
+  dashboard: createDashboard(),
 });
+
+/**
+ * Hilfen für die Widget-Spalte des ZimaOS-Dashboards (links: Uhr, System,
+ * Storage, Network …). Mods hängen ihre Karten hier ein, statt sie schwebend
+ * über das Dashboard zu legen – dann liegen ZimaOS-Fenster automatisch darüber.
+ */
+function createDashboard() {
+  const TITLES = {
+    system: ["system"],
+    storage: ["storage", "speicher"],
+    network: ["network", "netzwerk"],
+    settings: ["widget settings", "widget-einstellungen"],
+  };
+  const ALL = Object.values(TITLES).flat();
+  const own = new Set(); // von Mods eingehängte Elemente
+  const registrations = new Map(); // Element -> Optionen
+
+  const isOwn = (el) => [...own].some((o) => o.contains(el));
+
+  function titleElements(root = document) {
+    const out = [];
+    for (const el of root.querySelectorAll("span, div, p, h1, h2, h3, h4")) {
+      if (el.childElementCount || isOwn(el)) continue;
+      const text = (el.textContent || "").trim().toLowerCase();
+      if (ALL.includes(text) && el.getClientRects().length) out.push(el);
+    }
+    return out;
+  }
+
+  /** Kleinster gemeinsamer Vorfahr von mindestens zwei nativen Widget-Titeln. */
+  function widgetColumn() {
+    const titles = titleElements();
+    if (titles.length < 2) return null;
+    for (let node = titles[0].parentElement; node && node !== document.body; node = node.parentElement) {
+      if (titles.filter((t) => node.contains(t)).length < 2) continue;
+      const r = node.getBoundingClientRect();
+      const inDialog = node.closest('[role="dialog"], [aria-modal="true"]');
+      return r.width >= 200 && r.width <= 560 && !inDialog ? node : null;
+    }
+    return null;
+  }
+
+  /** Direktes Kind der Spalte, das das native Widget `name` (system, storage, network) enthält. */
+  function nativeWidget(name, column = widgetColumn()) {
+    if (!column) return null;
+    const names = TITLES[name] ?? [String(name).toLowerCase()];
+    let node = titleElements(column).find((t) => names.includes(t.textContent.trim().toLowerCase()));
+    while (node && node.parentElement !== column) node = node.parentElement;
+    return node || null;
+  }
+
+  function place(el, opts) {
+    const column = widgetColumn();
+    if (column) {
+      el.classList.add("zf-widget-embedded");
+      el.classList.remove("zf-widget-floating");
+      const anchor = opts.after ? nativeWidget(opts.after, column) : null;
+      const wanted = anchor ? anchor.nextSibling : opts.position === "end" ? null : column.firstChild;
+      // Schon in der Spalte: Position nicht erzwingen (Nutzer darf umsortieren).
+      if (el.parentElement !== column) column.insertBefore(el, wanted);
+    } else if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
+      el.classList.remove("zf-widget-embedded");
+      el.classList.add("zf-widget-floating");
+      document.body.append(el);
+    }
+  }
+
+  let pending = false;
+  const refresh = () => {
+    if (pending) return;
+    pending = true;
+    setTimeout(() => {
+      pending = false;
+      for (const [el, opts] of registrations) place(el, opts);
+      emit("dashboard", { column: widgetColumn() });
+    }, 300);
+  };
+  let observer = null;
+  const observe = () => {
+    if (observer || !document.body) return;
+    observer = new MutationObserver((records) => {
+      if (records.every((r) => isOwn(r.target))) return;
+      refresh();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  };
+
+  return Object.freeze({
+    widgetColumn,
+    nativeWidget,
+    /** Alle direkten Kinder der Widget-Spalte (native und eingehängte Widgets). */
+    widgets: () => [...(widgetColumn()?.children ?? [])],
+    /**
+     * Hängt `el` in die Widget-Spalte (nach `after`: "system" | "storage" | "network",
+     * sonst oben bzw. mit `position: "end"` unten) und hält es dort, wenn ZimaOS neu
+     * rendert. Ohne Spalte landet es schwebend im Body (Klasse `zf-widget-floating`).
+     * Gibt eine Funktion zum Entfernen zurück.
+     */
+    mountWidget(el, opts = {}) {
+      own.add(el);
+      registrations.set(el, opts);
+      place(el, opts);
+      observe();
+      return () => {
+        registrations.delete(el);
+        own.delete(el);
+        el.remove();
+      };
+    },
+    /** Meldet ZimaForge, dass Änderungen in `el` keine Neuplatzierung auslösen sollen. */
+    ignore(el) { own.add(el); },
+    /** Ruft `fn({ column })` auf, sobald ZimaOS die Seite umbaut. Gibt eine Abmeldefunktion zurück. */
+    watch(fn) {
+      observe();
+      if (!listeners.has("dashboard")) listeners.set("dashboard", new Set());
+      listeners.get("dashboard").add(fn);
+      return () => listeners.get("dashboard")?.delete(fn);
+    },
+  });
+}
 
 /** Kompatibilitätsschicht für Mods, die für ZimaMOD geschrieben wurden. */
 const ZimaMODShim = {

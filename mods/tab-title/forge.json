@@ -1,0 +1,12 @@
+{
+  "name": "Tab-Titel",
+  "version": "1.0.0",
+  "description": "Zeigt im Browser-Tab, welcher Server und welches Netz gerade offen ist, z. B. „ZimaOS · nas (LAN)“. Praktisch bei mehreren Servern oder Zugriff von außen.",
+  "category": "Komfort",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/tab-title" },
+  "tags": ["titel", "hostname", "netzwerk"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": []
+}

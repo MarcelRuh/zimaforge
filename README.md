@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icon.svg" alt="ZimaForge" width="140">
+  <img src="assets/logo.png" alt="ZimaForge – ZimaOS Toolkit" width="360">
 </p>
 
 <h1 align="center">ZimaForge</h1>
@@ -24,11 +24,21 @@ ZimaForge sitzt als Reverse-Proxy vor dem ZimaOS-Dashboard, schleust einen klein
 
 ## Mitgelieferte Mods
 
-| Mod               | Beschreibung                                                                                          |
-|-------------------|-------------------------------------------------------------------------------------------------------|
-| **Forge Pulse**   | Schwebendes Live-Widget mit CPU, RAM, Temperatur, Netzwerk und Laufzeit; verschiebbar und einklappbar |
-| **Forge Sparks**  | Aufsteigende Neon-Funken über dem Hintergrund; pausiert im Hintergrund-Tab und respektiert „Bewegung reduzieren“ |
-| **ora Polish**    | Pinke Textauswahl, Neon-Scrollbars, cyanfarbene Fokusrahmen und dezente Vignette                      |
+| Mod                     | Beschreibung                                                                                          |
+|-------------------------|-------------------------------------------------------------------------------------------------------|
+| **Forge Pulse**         | System-Widget im Aufbau des ZimaOS-System-Widgets: Ringanzeigen für CPU und RAM, **Leistung in Watt**, Temperatur, RAM-Größe; aufklappbar mit Last, Netzwerk und Laufzeit |
+| **Forge Wetter**        | Wetter-Widget mit aktueller Lage und 4-Tage-Vorschau (Open-Meteo, ohne API-Schlüssel), Ort per Suche  |
+| **Widget-Reihenfolge**  | Widgets der ZimaOS-Spalte per Griff (oder Pfeiltasten) umsortieren; Reihenfolge bleibt gespeichert    |
+| **ora Widgets**         | Neon-Rahmen und Glas-Look für die nativen ZimaOS-Widgets                                              |
+| **ora Polish**          | Pinke Textauswahl, Neon-Scrollbars, cyanfarbene Fokusrahmen und dezente Vignette                      |
+| **Tab-Titel**           | Zeigt Server und Netz im Browser-Tab, z. B. „ZimaOS · nas (LAN)“                                      |
+| **Forge Sparks**        | Aufsteigende Neon-Funken über dem Hintergrund                                                         |
+| **Forge Schnee**        | Fallender Schnee mit leichtem Neon-Schimmer                                                           |
+| **Emoji-Spur**          | Emoji-Spur hinter Maus und Finger, Emojis frei wählbar                                                |
+
+Widgets hängen sich in die **Widget-Spalte von ZimaOS** ein. Damit liegen Fenster wie der App Store automatisch darüber. Animationen pausieren im Hintergrund-Tab und respektieren „Bewegung reduzieren“.
+
+**Watt-Anzeige:** Die Leistung kommt aus dem RAPL-Energiezähler des Prozessors (`/sys/class/powercap/intel-rapl:*`, Intel und aktuelle AMD-Kernel). Sie misst die CPU-Pakete, nicht das ganze Gerät an der Steckdose. Gibt es keinen Zähler, zeigt Pulse nur die Temperatur.
 
 Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im Store aus.
 

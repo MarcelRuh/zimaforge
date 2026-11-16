@@ -1,0 +1,12 @@
+{
+  "name": "Emoji-Spur",
+  "version": "1.0.0",
+  "description": "Eine kurze Spur aus Emojis folgt Maus und Finger. Die Emojis lassen sich in den Mod-Einstellungen ändern (Feld „emojis“).",
+  "category": "Spaß",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/emoji-trail" },
+  "tags": ["cursor", "emoji", "animation"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": []
+}

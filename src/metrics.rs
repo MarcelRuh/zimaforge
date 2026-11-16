@@ -27,6 +27,8 @@ pub struct Metrics {
     pub uptime_seconds: Option<f64>,
     /// Höchste Temperatur aller Thermal-Zonen in °C.
     pub temperature: Option<f64>,
+    /// Leistungsaufnahme der CPU-Pakete in Watt (RAPL), falls verfügbar.
+    pub power_watts: Option<f64>,
     /// Summe empfangener/gesendeter Bytes physischer Schnittstellen (Zähler).
     pub net_rx_bytes: Option<u64>,
     pub net_tx_bytes: Option<u64>,
@@ -121,10 +123,49 @@ fn round1(v: f64) -> f64 {
     (v * 10.0).round() / 10.0
 }
 
+/// Energiezähler einer RAPL-Zone (`/sys/class/powercap/intel-rapl:N`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RaplZone {
+    pub name: String,
+    pub energy_uj: u64,
+    pub max_uj: u64,
+}
+
+/// Leistungsaufnahme in Watt aus zwei Zähler-Ständen; berücksichtigt Überläufe.
+pub fn power_watts(prev: &[RaplZone], next: &[RaplZone], seconds: f64) -> Option<f64> {
+    if seconds <= 0.0 {
+        return None;
+    }
+    let mut joules_uj: u64 = 0;
+    let mut matched = false;
+    for n in next {
+        let Some(p) = prev.iter().find(|p| p.name == n.name) else {
+            continue;
+        };
+        let delta = if n.energy_uj >= p.energy_uj {
+            n.energy_uj - p.energy_uj
+        } else {
+            // Zähler übergelaufen
+            n.max_uj.saturating_sub(p.energy_uj).saturating_add(n.energy_uj)
+        };
+        joules_uj = joules_uj.saturating_add(delta);
+        matched = true;
+    }
+    matched.then(|| round1(joules_uj as f64 / 1_000_000.0 / seconds))
+}
+
+/// Ein Messzeitpunkt für Werte, die eine Differenz brauchen (CPU, Leistung).
+#[derive(Debug, Clone)]
+struct DeltaSample {
+    cpu: Option<CpuSample>,
+    rapl: Vec<RaplZone>,
+    at: std::time::Instant,
+}
+
 pub struct MetricsReader {
     proc_dir: PathBuf,
     sys_dir: PathBuf,
-    last_cpu: Mutex<Option<CpuSample>>,
+    last: Mutex<Option<DeltaSample>>,
 }
 
 impl MetricsReader {
@@ -132,8 +173,74 @@ impl MetricsReader {
         Self {
             proc_dir,
             sys_dir,
-            last_cpu: Mutex::new(None),
+            last: Mutex::new(None),
         }
+    }
+
+    /// Top-Level-Zonen (Pakete), z. B. `intel-rapl:0` – nicht die Unterzonen `intel-rapl:0:0`.
+    async fn rapl(&self) -> Vec<RaplZone> {
+        let base = self.sys_dir.join("class/powercap");
+        let Ok(mut dir) = tokio::fs::read_dir(&base).await else {
+            return Vec::new();
+        };
+        let mut zones = Vec::new();
+        while let Ok(Some(entry)) = dir.next_entry().await {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("intel-rapl:") || name.matches(':').count() != 1 {
+                continue;
+            }
+            let read_u64 = |file: &'static str| {
+                let path = entry.path().join(file);
+                async move { Self::read(&path).await.and_then(|v| v.trim().parse::<u64>().ok()) }
+            };
+            if let Some(energy_uj) = read_u64("energy_uj").await {
+                let max_uj = read_u64("max_energy_range_uj").await.unwrap_or(u64::MAX);
+                zones.push(RaplZone {
+                    name,
+                    energy_uj,
+                    max_uj,
+                });
+            }
+        }
+        zones
+    }
+
+    async fn delta_sample(&self) -> DeltaSample {
+        DeltaSample {
+            cpu: Self::read(&self.proc_dir.join("stat"))
+                .await
+                .as_deref()
+                .and_then(parse_cpu),
+            rapl: self.rapl().await,
+            at: std::time::Instant::now(),
+        }
+    }
+
+    /// CPU-Auslastung und Leistung seit dem letzten Abruf. Beim ersten Abruf
+    /// (oder wenn sich nichts bewegt hat) wird kurz ein zweites Mal gemessen.
+    async fn deltas(&self) -> (Option<f64>, Option<f64>) {
+        let mut now = self.delta_sample().await;
+        let mut last = self.last.lock().await;
+        let usable = |prev: &DeltaSample, now: &DeltaSample| match (prev.cpu, now.cpu) {
+            (Some(p), Some(n)) => n.total > p.total,
+            _ => now.at.duration_since(prev.at) >= Duration::from_millis(200),
+        };
+        let prev = match last.take() {
+            Some(prev) if usable(&prev, &now) => prev,
+            _ => {
+                let prev = now;
+                tokio::time::sleep(Duration::from_millis(250)).await;
+                now = self.delta_sample().await;
+                prev
+            }
+        };
+        let cpu = match (prev.cpu, now.cpu) {
+            (Some(p), Some(n)) => cpu_percent(p, n),
+            _ => None,
+        };
+        let watts = power_watts(&prev.rapl, &now.rapl, now.at.duration_since(prev.at).as_secs_f64());
+        *last = Some(now);
+        (cpu, watts)
     }
 
     async fn read(path: &Path) -> Option<String> {
@@ -162,32 +269,7 @@ impl MetricsReader {
 
     pub async fn snapshot(&self) -> Metrics {
         let stat = Self::read(&self.proc_dir.join("stat")).await;
-        let mut cpu_percent = None;
-        if let Some(sample) = stat.as_deref().and_then(parse_cpu) {
-            let mut last = self.last_cpu.lock().await;
-            let prev = match *last {
-                Some(prev) if prev.total < sample.total => Some(prev),
-                _ => {
-                    // Erster Aufruf: kurzes zweites Sample für einen sinnvollen Wert.
-                    drop(last);
-                    tokio::time::sleep(Duration::from_millis(250)).await;
-                    let again = Self::read(&self.proc_dir.join("stat"))
-                        .await
-                        .as_deref()
-                        .and_then(parse_cpu);
-                    last = self.last_cpu.lock().await;
-                    if let Some(again) = again {
-                        cpu_percent = self::cpu_percent(sample, again);
-                        *last = Some(again);
-                    }
-                    None
-                }
-            };
-            if let Some(prev) = prev {
-                cpu_percent = self::cpu_percent(prev, sample);
-                *last = Some(sample);
-            }
-        }
+        let (cpu_percent, power_watts) = self.deltas().await;
 
         let meminfo = Self::read(&self.proc_dir.join("meminfo")).await.unwrap_or_default();
         let mem_total = parse_meminfo(&meminfo, "MemTotal");
@@ -218,6 +300,7 @@ impl MetricsReader {
                 .as_deref()
                 .and_then(parse_uptime),
             temperature: self.temperature().await,
+            power_watts,
             net_rx_bytes: net.map(|n| n.0),
             net_tx_bytes: net.map(|n| n.1),
             timestamp_ms: std::time::SystemTime::now()
@@ -280,5 +363,47 @@ mod tests {
         assert_eq!(m.temperature, Some(48.5));
         assert_eq!(m.load, Some([1.0, 2.0, 3.0]));
         assert_eq!(m.uptime_seconds, None);
+    }
+
+    #[test]
+    fn power_from_rapl_counters() {
+        let z = |name: &str, e: u64| RaplZone {
+            name: name.into(),
+            energy_uj: e,
+            max_uj: 1_000_000_000,
+        };
+        // 25 J in 2 s über zwei Pakete = 12,5 W
+        let prev = [z("intel-rapl:0", 1_000_000), z("intel-rapl:1", 5_000_000)];
+        let next = [z("intel-rapl:0", 16_000_000), z("intel-rapl:1", 15_000_000)];
+        assert_eq!(power_watts(&prev, &next, 2.0), Some(12.5));
+        // Überlauf: 999_000_000 -> 4_000_000 bei max 1e9 = 5 J in 1 s
+        assert_eq!(
+            power_watts(&[z("intel-rapl:0", 999_000_000)], &[z("intel-rapl:0", 4_000_000)], 1.0),
+            Some(5.0)
+        );
+        assert_eq!(power_watts(&[], &next, 1.0), None);
+        assert_eq!(power_watts(&prev, &next, 0.0), None);
+    }
+
+    // Doppelpunkte in Ordnernamen gibt es nur unter Unix (wie im echten /sys).
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rapl_reads_only_package_zones() {
+        let tmp = tempfile::tempdir().unwrap();
+        let sys = tmp.path().join("sys");
+        for (zone, e) in [
+            ("intel-rapl:0", "1000"),
+            ("intel-rapl:0:0", "999999"),
+            ("intel-rapl-mmio:0", "5"),
+        ] {
+            let d = sys.join("class/powercap").join(zone);
+            std::fs::create_dir_all(&d).unwrap();
+            std::fs::write(d.join("energy_uj"), e).unwrap();
+        }
+        let reader = MetricsReader::new(tmp.path().join("proc"), sys);
+        let zones = reader.rapl().await;
+        assert_eq!(zones.len(), 1);
+        assert_eq!(zones[0].name, "intel-rapl:0");
+        assert_eq!(zones[0].max_uj, u64::MAX);
     }
 }

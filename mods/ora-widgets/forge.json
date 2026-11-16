@@ -1,0 +1,12 @@
+{
+  "name": "ora Widgets",
+  "version": "1.0.0",
+  "description": "Gibt den nativen ZimaOS-Widgets (Uhr, System, Storage, Network …) einen dezenten Neon-Rahmen und Glas-Look im ora-Design.",
+  "category": "Design",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/ora-widgets" },
+  "tags": ["theme", "widgets", "ora"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}

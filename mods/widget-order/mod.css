@@ -1,0 +1,37 @@
+.zf-order-item { position: relative; }
+
+.zf-order-grip {
+  position: absolute;
+  z-index: 3;
+  top: 4px;
+  left: 50%;
+  width: 34px;
+  height: 14px;
+  margin-left: -17px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  cursor: grab;
+  touch-action: none;
+  opacity: 0;
+  background:
+    radial-gradient(circle, #ffffffcc 1.4px, transparent 1.6px) 0 0 / 7px 7px,
+    #ffffff1f;
+  background-position: 3px 0, 0 0;
+  transition: opacity .15s, background-color .15s;
+}
+.zf-order-item:hover > .zf-order-grip,
+.zf-order-grip:focus-visible,
+.zf-order-active .zf-order-grip { opacity: 1; }
+.zf-order-grip:hover { background-color: #ff006e66; }
+.zf-order-grip:focus-visible { outline: 2px solid #00b4d8; outline-offset: 2px; }
+
+.zf-order-dragging {
+  opacity: .85;
+  outline: 2px dashed #ff006e !important;
+  outline-offset: 2px;
+  cursor: grabbing;
+}
+.zf-order-dragging .zf-order-grip { cursor: grabbing; }
+
+@media (hover: none) { .zf-order-grip { opacity: .7; } }

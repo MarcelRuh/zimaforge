@@ -2,6 +2,18 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Neu
+- Neues Logo (ZimaOS Toolkit) für App-Icon, Launcher, Store und README.
+- Forge Pulse 2.0: aufgebaut wie das ZimaOS-System-Widget mit Ringanzeigen, Leistung in Watt (RAPL) und Temperatur; sitzt in der Widget-Spalte.
+- `/_forge/api/metrics` liefert `powerWatts` (Summe der RAPL-Paketzonen, Überlauf berücksichtigt).
+- `ZimaForge.dashboard`: gemeinsame API zum Einhängen von Widgets in die ZimaOS-Widget-Spalte.
+- Neue Mods: Forge Wetter, Widget-Reihenfolge, ora Widgets, Tab-Titel, Forge Schnee, Emoji-Spur.
+
+### Geändert
+- Launcher und Widgets liegen jetzt unter ZimaOS-Fenstern wie dem App Store (niedriger z-index bzw. in der Widget-Spalte).
+
 ## [0.1.1] – 2026-11-16
 
 ### Neu

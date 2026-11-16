@@ -1,0 +1,13 @@
+{
+  "name": "Forge Wetter",
+  "version": "1.0.0",
+  "description": "Wetter-Widget in der ZimaOS-Widget-Spalte: aktuelle Temperatur, gefühlte Temperatur, Luftfeuchte, Wind und 4-Tage-Vorschau. Daten von Open-Meteo, ohne API-Schlüssel; Ort per Suche festlegen.",
+  "category": "Widgets",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/forge-weather" },
+  "homepage": "https://open-meteo.com/",
+  "tags": ["wetter", "weather", "widget"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}

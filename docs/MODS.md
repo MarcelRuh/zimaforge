@@ -57,7 +57,7 @@ F.assetUrl("mein-mod", "img/a.png")  // URL einer Datei im eigenen Mod-Ordner
 await F.getConfig("mein-mod", { farbe: "pink" })  // Einstellungen lesen (öffentlich)
 await F.setConfig("mein-mod", { farbe: "cyan" })  // speichern – braucht ZimaOS-Anmeldung
 
-await F.metrics()   // { cpuPercent, cpuCores, memTotal, memAvailable, memPercent,
+await F.metrics()   // { cpuPercent, cpuCores, memTotal, memAvailable, memPercent, powerWatts,
                     //   load: [1,5,15], uptimeSeconds, temperature, netRxBytes, netTxBytes, timestampMs }
 
 await F.store.list()               // Katalog und installierte Mods
@@ -65,6 +65,13 @@ await F.store.active()             // aktive Mods
 F.openStore("installed")           // Store öffnen: discover | installed | updates | settings
 
 F.on("config", ({ id, config }) => { /* … */ })   // Ereignisse: ready, change, config
+
+// Widget-Spalte von ZimaOS (Uhr, System, Storage, Network …)
+F.dashboard.mountWidget(el, { after: "system" })  // einhängen und dort halten; gibt unmount() zurück
+F.dashboard.widgetColumn()        // Spalten-Element oder null
+F.dashboard.nativeWidget("storage")  // natives Widget-Element
+F.dashboard.watch(fn)             // fn bei jedem Umbau des Dashboards aufrufen
+F.dashboard.ignore(el)            // Änderungen in el lösen keinen Umbau-Alarm aus
 ```
 
 Schreibende Aufrufe werfen bei fehlender oder abgelaufener Anmeldung einen `ZimaForge.ForgeError` mit `status` 401 und einer verständlichen deutschen Meldung.
@@ -77,7 +84,7 @@ Für ältere Mods gibt es zusätzlich `window.ZimaMOD` mit `assetUrl`, `getConfi
 - **Nicht auf Dashboard-Klassen verlassen:** ZimaOS ändert sein DOM zwischen Versionen. Eigene, fixierte Elemente (`position: fixed`) sind am robustesten.
 - **Präfix für CSS-Klassen**, zum Beispiel `.mein-mod-…`, damit nichts kollidiert.
 - **Rücksicht nehmen:** Bei `document.hidden` pausieren und `prefers-reduced-motion` respektieren.
-- **z-index** unter `2147483000` halten. Darüber liegen Launcher und Store.
+- **z-index niedrig halten** (unter 100), damit Fenster von ZimaOS wie der App Store darüber liegen. Widgets am besten in die Widget-Spalte einhängen (siehe Forge Pulse).
 - **Keine Geheimnisse** in `config` speichern. Einstellungen sind ohne Anmeldung lesbar.
 
 ## Testen

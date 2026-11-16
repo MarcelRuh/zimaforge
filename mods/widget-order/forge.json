@@ -1,0 +1,12 @@
+{
+  "name": "Widget-Reihenfolge",
+  "version": "1.0.0",
+  "description": "Ordnet die Widgets in der ZimaOS-Widget-Spalte per Ziehen neu – auch die von Mods wie Forge Pulse und Forge Wetter. Die Reihenfolge bleibt nach dem Neuladen erhalten.",
+  "category": "Komfort",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/widget-order" },
+  "tags": ["widgets", "sortieren", "drag and drop"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}
