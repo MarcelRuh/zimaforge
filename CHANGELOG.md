@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.8] – 2026-11-17
 
 ### Behoben
 - Forge Pulse 2.5.2: Mit beim letzten Mal aufgeklapptem Detailbereich schlug die erste Aktualisierung fehl („Cannot access 'busy' before initialization“).
