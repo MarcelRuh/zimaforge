@@ -243,11 +243,29 @@ function createDashboard() {
     return true;
   }
 
+  /**
+   * Abstand wie bei den nativen Widgets: Deren berechnete Margins übernehmen (nutzt
+   * ZimaOS `gap` in der Spalte, sind sie 0 – dann passt es ebenfalls). Als Muster dient
+   * das letzte native Widget, damit auch Regeln wie `.widget + .widget` greifen.
+   */
+  function matchSpacing(el, col) {
+    let sample = null;
+    for (let i = col.children.length - 1; i >= 0 && !sample; i--) {
+      const c = col.children[i];
+      if (!isOwn(c) && c.getClientRects().length) sample = c;
+    }
+    if (!sample) return;
+    const cs = getComputedStyle(sample);
+    el.style.marginTop = cs.marginTop;
+    el.style.marginBottom = cs.marginBottom;
+  }
+
   function place(el, opts) {
     const col = widgetColumn();
     if (col) {
       el.classList.add("zf-widget-embedded");
       el.classList.remove("zf-widget-floating");
+      matchSpacing(el, col);
       if (inPlace(el, opts, col)) return;
       const before = opts.before ? firstNative(opts.before, col) : null;
       const after = !before && opts.after ? firstNative(opts.after, col) : null;
@@ -256,6 +274,7 @@ function createDashboard() {
     } else if (!el.isConnected || el.classList.contains("zf-widget-embedded")) {
       el.classList.remove("zf-widget-embedded");
       el.classList.add("zf-widget-floating");
+      el.style.marginTop = el.style.marginBottom = "";
       document.body.append(el);
     }
   }

@@ -15,7 +15,8 @@
 }
 .zf-weather *, .zf-weather *::before, .zf-weather *::after { box-sizing: border-box; }
 .zf-weather.offline { opacity: .7; }
-.zf-weather.zf-widget-embedded { position: relative; width: 100%; margin: 0 0 12px; }
+/* Abstand übernimmt ZimaForge von den nativen Widgets (inline gesetzt). */
+.zf-weather.zf-widget-embedded { position: relative; width: 100%; margin: 0; }
 .zf-weather.zf-widget-floating { position: fixed; z-index: 20; top: 76px; right: 20px; width: 300px; }
 
 .zf-weather-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }

@@ -20,7 +20,8 @@
 .zf-pulse.offline { opacity: .6; }
 
 /* In der ZimaOS-Widget-Spalte: Abstand wie die nativen Widgets. */
-.zf-pulse.zf-widget-embedded { position: relative; width: 100%; margin: 0 0 12px; }
+/* Abstand übernimmt ZimaForge von den nativen Widgets (inline gesetzt). */
+.zf-pulse.zf-widget-embedded { position: relative; width: 100%; margin: 0; }
 
 /* Ohne Widget-Spalte: schwebend, aber unter allen ZimaOS-Fenstern und Dialogen. */
 .zf-pulse.zf-widget-floating {
