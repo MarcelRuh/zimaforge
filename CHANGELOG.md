@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.3] – 2026-11-16
 
 ### Performance
 - Proxy entfernt `Accept-Encoding` nur noch bei Seitenaufrufen (HTML, für die Loader-Injection). JS, CSS, Bilder und API-Antworten von ZimaOS kommen wieder komprimiert.
