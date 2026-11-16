@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.1] – 2026-11-16
 
 ### Geändert
 - Forge Pulse 2.3: CPU- und RAM-Tab zeigen wie im ZimaOS-System-Widget nur die Apps mit Icon und Prozentwert. Die Zuordnung Container → App kommt direkt aus der ZimaOS-App-Verwaltung (`/v2/app_management/web/appgrid` und `/compose/{app}/containers`) – ohne Docker-Ordner.
