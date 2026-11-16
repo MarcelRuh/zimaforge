@@ -6,7 +6,7 @@ const VERSION = F?.version ?? "dev";
 const CORE_ID = "zimaforge";
 const REPO = "MarcelRuh/zimaforge";
 const UPDATE_KEY = "zimaforge:update";
-const UPDATE_TTL = 8 * 60 * 60 * 1000;
+const UPDATE_TTL = 2 * 60 * 60 * 1000;
 const SHORTCUT = (e) => e.altKey && e.shiftKey && e.code === "KeyF";
 
 const DEFAULT_SETTINGS = { launcher: "bottom-right", updateCheck: true };
@@ -48,10 +48,20 @@ function cmpVersion(a, b) {
   return 0;
 }
 
+// „Update verfügbar“ wird nie gespeichert, sondern bei jeder Anzeige aus der
+// zuletzt bekannten GitHub-Version und der laufenden Version berechnet.
+const withAvailability = (latest, url) => ({
+  latest,
+  url,
+  available: VERSION !== "dev" && cmpVersion(latest, VERSION) > 0,
+});
+
 async function checkForUpdate(force = false) {
   try {
     const cached = JSON.parse(localStorage.getItem(UPDATE_KEY) || "null");
-    if (!force && cached && Date.now() - cached.at < UPDATE_TTL) return cached.data;
+    // Cache gilt nur für dieselbe laufende Version – nach einem Update neu prüfen.
+    const fresh = cached?.checkedWith === VERSION && Date.now() - cached.at < UPDATE_TTL;
+    if (!force && fresh && cached.latest) return withAvailability(cached.latest, cached.url);
   } catch { /* kein Cache */ }
   const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
     headers: { Accept: "application/vnd.github+json" },
@@ -59,13 +69,11 @@ async function checkForUpdate(force = false) {
   });
   if (!res.ok) throw new Error(`GitHub ${res.status}`);
   const release = await res.json();
-  const data = {
-    latest: String(release.tag_name || "").replace(/^v/, ""),
-    url: release.html_url,
-    available: cmpVersion(release.tag_name, VERSION) > 0 && VERSION !== "dev",
-  };
-  try { localStorage.setItem(UPDATE_KEY, JSON.stringify({ at: Date.now(), data })); } catch { /* egal */ }
-  return data;
+  const latest = String(release.tag_name || "").replace(/^v/, "");
+  try {
+    localStorage.setItem(UPDATE_KEY, JSON.stringify({ at: Date.now(), checkedWith: VERSION, latest, url: release.html_url }));
+  } catch { /* egal */ }
+  return withAvailability(latest, release.html_url);
 }
 
 let settingsCache = null;
@@ -226,7 +234,8 @@ class ForgeStore extends HTMLElement {
     if (launcher) launcher.updateAvailable = Boolean(u?.available);
     box.classList.toggle("has", Boolean(u?.available));
     box.innerHTML = u?.available
-      ? `<div class="u-row"><span class="u-label">Update verfügbar</span><span class="pill hot">v${esc(u.latest)}</span></div>
+      ? `<div class="u-row"><span class="u-label">Update verfügbar</span><span class="pill hot">v${esc(u.latest)}</span>
+           <button type="button" class="icon-btn sm" data-act="check" aria-label="Erneut prüfen">${icon("refresh")}</button></div>
          <p>In ZimaOS die App „ZimaForge“ aktualisieren oder das Image neu ziehen.</p>
          <a class="link" href="${esc(safeUrl(u.url))}" target="_blank" rel="noopener">Release ansehen ${icon("external")}</a>`
       : `<div class="u-row"><span class="u-label">${u ? "Aktuell" : "Version"} · v${esc(VERSION)}</span>
@@ -353,7 +362,7 @@ class ForgeStore extends HTMLElement {
             <input type="checkbox" data-setting="updateCheck" ${s.updateCheck !== false ? "checked" : ""}>
             <span class="track"></span><span class="sw-label">Auf GitHub nach neuen Versionen suchen</span>
           </label>
-          <p class="hint">Der Browser fragt <code>api.github.com</code> höchstens alle 8 Stunden ab.</p>
+          <p class="hint">Der Browser fragt <code>api.github.com</code> höchstens alle 2 Stunden und nach jedem Update ab.</p>
         </section>
         <section class="panel">
           <h2>Eigene Mods</h2>

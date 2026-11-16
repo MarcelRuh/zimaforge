@@ -2,6 +2,12 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Behoben
+- Update-Hinweis im Store blieb nach einem Update auf „Update verfügbar“ hängen. Gespeichert wird jetzt nur die neueste GitHub-Version; ob ein Update verfügbar ist, wird bei jeder Anzeige neu berechnet. Nach einem Versionswechsel wird sofort neu geprüft, sonst höchstens alle 2 Stunden.
+- Auch im Zustand „Update verfügbar“ gibt es jetzt den Knopf „Erneut prüfen“.
+
 ## [0.3.1] – 2026-11-16
 
 ### Geändert
