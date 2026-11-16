@@ -32,11 +32,11 @@ ZimaForge sitzt als Reverse-Proxy vor dem ZimaOS-Dashboard, schleust einen klein
 | **ora Widgets**         | Neon-Rahmen und Glas-Look für die nativen ZimaOS-Widgets                                              |
 | **ora Polish**          | Pinke Textauswahl, Neon-Scrollbars, cyanfarbene Fokusrahmen und dezente Vignette                      |
 | **Tab-Titel**           | Zeigt Server und Netz im Browser-Tab, z. B. „ZimaOS · nas (LAN)“                                      |
-| **Forge Sparks**        | Aufsteigende Neon-Funken über dem Hintergrund                                                         |
+| **Forge Sparks**        | Aufsteigende Neon-Funken über dem Dashboard                                                           |
 | **Forge Schnee**        | Fallender Schnee mit leichtem Neon-Schimmer                                                           |
 | **Emoji-Spur**          | Emoji-Spur hinter Maus und Finger, Emojis frei wählbar                                                |
 
-Widgets hängen sich in die **Widget-Spalte von ZimaOS** ein. Damit liegen Fenster wie der App Store automatisch darüber. Animationen pausieren im Hintergrund-Tab und respektieren „Bewegung reduzieren“.
+Widgets hängen sich in die **Widget-Spalte von ZimaOS** ein. Damit liegen Fenster wie der App Store automatisch darüber. Effekte (Schnee, Funken, Emoji-Spur) liegen über dem Dashboard, blenden sich bei offenen ZimaOS-Fenstern aus, pausieren im Hintergrund-Tab und laufen bei „Bewegung reduzieren“ ruhiger.
 
 **Watt-Anzeige:** Die Leistung kommt aus dem RAPL-Energiezähler des Prozessors (`/sys/class/powercap/intel-rapl:*`, Intel und aktuelle AMD-Kernel). Sie misst die CPU-Pakete, nicht das ganze Gerät an der Steckdose. Gibt es keinen Zähler, zeigt Pulse nur die Temperatur.
 

@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Behoben
+- Forge Schnee, Forge Sparks und Emoji-Spur blieben unsichtbar, wenn das System „Bewegung reduzieren“ meldet (z. B. Windows mit ausgeschalteten Animationseffekten) oder ZimaOS sie überdeckte. Sie laufen jetzt in diesem Fall ruhiger statt gar nicht und liegen auf einer eigenen Ebene über dem Dashboard.
+
+### Neu
+- `ZimaForge.effects`: klick-durchlässige Effekt-Ebene über dem Dashboard, die sich ausblendet, solange ein ZimaOS-Fenster (App Store, Dialoge) offen ist; `reducedMotion()` für ruhigere Animationen.
+- Emoji-Spur hört Mausbewegungen in der Capture-Phase, damit ZimaOS sie nicht abfängt.
+
 ## [0.3.6] – 2026-11-16
 
 ### Behoben

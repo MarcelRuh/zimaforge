@@ -1,18 +1,21 @@
 // Forge Schnee – fallende Flocken mit leichtem Neon-Schimmer (klick-durchlässig).
 (() => {
   "use strict";
-  if (document.querySelector("canvas.zf-snow")) return;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const F = window.ZimaForge;
+  if (!F?.effects || document.querySelector("canvas.zf-snow")) return;
+
+  // „Bewegung reduzieren“: nicht abschalten (der Mod wurde bewusst installiert),
+  // sondern ruhig – weniger und langsamere Flocken.
+  const CALM = F.effects.reducedMotion();
+  const DENSITY = CALM ? 0.4 : 1;
+  const SPEED = CALM ? 0.45 : 1;
 
   const TINTS = ["255,255,255", "255,255,255", "190,230,255", "225,200,255"];
   const canvas = document.createElement("canvas");
   canvas.className = "zf-snow";
-  canvas.setAttribute("aria-hidden", "true");
-  Object.assign(canvas.style, {
-    position: "fixed", inset: "0", width: "100vw", height: "100vh", pointerEvents: "none", zIndex: "1",
-  });
-  document.body.append(canvas);
-  window.ZimaForge?.dashboard?.ignore(canvas);
+  // Eigene Ebene über dem Dashboard; ausgeblendet, solange ein ZimaOS-Fenster offen ist.
+  F.effects.layer(canvas);
+  F.dashboard?.ignore(canvas);
 
   const ctx = canvas.getContext("2d");
   let w = 0, h = 0, flakes = [], raf = 0, last = performance.now(), wind = 0;
@@ -23,8 +26,8 @@
       x: Math.random() * w,
       y: anywhere ? Math.random() * h : -10,
       r: 0.8 + depth * 2.6,
-      vy: 14 + depth * 46,
-      sway: 6 + Math.random() * 18,
+      vy: (14 + depth * 46) * SPEED,
+      sway: (6 + Math.random() * 18) * SPEED,
       phase: Math.random() * Math.PI * 2,
       alpha: 0.35 + depth * 0.55,
       tint: TINTS[(Math.random() * TINTS.length) | 0],
@@ -36,7 +39,7 @@
     w = innerWidth; h = innerHeight;
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const target = Math.round(Math.min(160, (w * h) / 11000));
+    const target = Math.round(Math.min(160, (w * h) / 11000) * DENSITY);
     while (flakes.length < target) flakes.push(flake(true));
     flakes.length = target;
   }

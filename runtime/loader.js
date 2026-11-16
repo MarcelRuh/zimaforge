@@ -120,6 +120,7 @@ const ZimaForge = Object.freeze({
     document.querySelector("zimaforge-store")?.open(view);
   },
   dashboard: createDashboard(),
+  effects: createEffects(),
 });
 
 /**
@@ -127,6 +128,54 @@ const ZimaForge = Object.freeze({
  * Storage, Network …). Mods hängen ihre Karten hier ein, statt sie schwebend
  * über das Dashboard zu legen – dann liegen ZimaOS-Fenster automatisch darüber.
  */
+
+/**
+ * Gemeinsame Ebene für Effekt-Mods (Schnee, Funken, Emoji-Spur): liegt über dem
+ * Dashboard, lässt alle Klicks durch und blendet sich aus, solange ein ZimaOS-Fenster
+ * (App Store, Einstellungen, Dialoge) offen ist.
+ */
+function createEffects() {
+  const DIALOGS = '[aria-modal="true"], [role="dialog"], .modal.is-active, .el-dialog__wrapper, .v-modal';
+  const layers = new Set();
+  let timer = null;
+
+  const dialogOpen = () => {
+    for (const el of document.querySelectorAll(DIALOGS)) {
+      if (el.closest("zimaforge-store, zimaforge-launcher")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden") return true;
+    }
+    return false;
+  };
+
+  const check = () => {
+    const hide = dialogOpen();
+    for (const l of layers) {
+      if (!l.isConnected) layers.delete(l);
+      else l.style.visibility = hide ? "hidden" : "";
+    }
+    if (!layers.size) { clearInterval(timer); timer = null; }
+  };
+
+  return Object.freeze({
+    /** Nutzer hat „Bewegung reduzieren“ eingestellt – Effekte dann ruhiger laufen lassen. */
+    reducedMotion: () => matchMedia("(prefers-reduced-motion: reduce)").matches,
+    /** Macht `el` (Canvas oder Container) zur klick-durchlässigen Effekt-Ebene über dem Dashboard. */
+    layer(el) {
+      Object.assign(el.style, {
+        position: "fixed", inset: "0", width: "100vw", height: "100vh",
+        pointerEvents: "none", zIndex: "2147480000",
+      });
+      el.setAttribute("aria-hidden", "true");
+      if (!el.isConnected) document.body.append(el);
+      layers.add(el);
+      if (!timer) timer = setInterval(check, 600);
+      check();
+      return el;
+    },
+  });
+}
+
 function createDashboard() {
   const TITLES = {
     system: ["system"],

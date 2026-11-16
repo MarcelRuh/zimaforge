@@ -2,20 +2,25 @@
 (async () => {
   "use strict";
   const F = window.ZimaForge;
-  if (window.__zfEmojiTrail) return;
+  if (!F?.effects || window.__zfEmojiTrail) return;
   window.__zfEmojiTrail = true;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+  // „Bewegung reduzieren“: ruhiger statt aus – seltener, kürzer, ohne Drehung.
+  const CALM = F.effects.reducedMotion();
+  const MIN_MS = CALM ? 120 : 40;
+  const MIN_PX = CALM ? 40 : 14;
 
   const DEFAULT = "✨⚡💜🔥";
-  const cfg = (await F?.getConfig("emoji-trail", null)) ?? {};
+  const cfg = (await F.getConfig("emoji-trail", null)) ?? {};
   const emojis = [...new Intl.Segmenter().segment(String(cfg.emojis || DEFAULT))].map((s) => s.segment).filter((s) => s.trim());
   if (!emojis.length) return;
 
   const layer = document.createElement("div");
-  layer.setAttribute("aria-hidden", "true");
-  Object.assign(layer.style, { position: "fixed", inset: "0", pointerEvents: "none", zIndex: "30", overflow: "hidden" });
-  document.body.append(layer);
-  F?.dashboard?.ignore(layer);
+  layer.className = "zf-emoji-trail";
+  layer.style.overflow = "hidden";
+  // Eigene Ebene über dem Dashboard; ausgeblendet, solange ein ZimaOS-Fenster offen ist.
+  F.effects.layer(layer);
+  F.dashboard?.ignore(layer);
 
   const POOL = 24;
   const pool = Array.from({ length: POOL }, () => {
@@ -33,23 +38,26 @@
     const el = pool[next];
     next = (next + 1) % POOL;
     el.textContent = emojis[(Math.random() * emojis.length) | 0];
-    const dx = (Math.random() - 0.5) * 30;
-    const rot = (Math.random() - 0.5) * 60;
+    const dx = CALM ? 0 : (Math.random() - 0.5) * 30;
+    const rot = CALM ? 0 : (Math.random() - 0.5) * 60;
+    const fall = CALM ? 10 : 26;
     el.getAnimations().forEach((a) => a.cancel());
     el.animate(
       [
         { transform: `translate(${x - 9}px, ${y - 9}px) scale(1) rotate(0deg)`, opacity: 1 },
-        { transform: `translate(${x - 9 + dx}px, ${y + 26}px) scale(.4) rotate(${rot}deg)`, opacity: 0 },
+        { transform: `translate(${x - 9 + dx}px, ${y + fall}px) scale(.4) rotate(${rot}deg)`, opacity: 0 },
       ],
-      { duration: 800 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.4,1)", fill: "forwards" },
+      { duration: CALM ? 600 : 800 + Math.random() * 300, easing: "cubic-bezier(.2,.7,.4,1)", fill: "forwards" },
     );
   }
 
-  addEventListener("pointermove", (e) => {
+  // Capture-Phase: kommt auch an, wenn ZimaOS Ereignisse unterwegs anhält.
+  document.addEventListener("pointermove", (e) => {
+    if (layer.style.visibility === "hidden") return;
     const now = performance.now();
     const moved = Math.hypot(e.clientX - lastX, e.clientY - lastY);
-    if (now - lastAt < 40 || moved < 14) return;
+    if (now - lastAt < MIN_MS || moved < MIN_PX) return;
     lastAt = now; lastX = e.clientX; lastY = e.clientY;
     spawn(e.clientX, e.clientY);
-  }, { passive: true });
+  }, { passive: true, capture: true });
 })();

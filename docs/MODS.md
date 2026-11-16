@@ -74,6 +74,11 @@ F.dashboard.widgetColumn()        // Spalten-Element oder null
 F.dashboard.nativeWidget("storage")  // natives Widget-Element: "clock", "system", "storage", "network"
 F.dashboard.watch(fn)             // fn bei jedem Umbau des Dashboards aufrufen
 F.dashboard.ignore(el)            // Änderungen in el lösen keinen Umbau-Alarm aus
+
+// Effekte (Schnee, Funken …): klick-durchlässige Ebene über dem Dashboard,
+// automatisch ausgeblendet, solange ein ZimaOS-Fenster (App Store …) offen ist
+F.effects.layer(canvas)
+F.effects.reducedMotion()         // true bei „Bewegung reduzieren“ – dann ruhiger animieren
 ```
 
 Schreibende Aufrufe werfen bei fehlender oder abgelaufener Anmeldung einen `ZimaForge.ForgeError` mit `status` 401 und einer verständlichen deutschen Meldung.
@@ -85,7 +90,7 @@ Für ältere Mods gibt es zusätzlich `window.ZimaMOD` mit `assetUrl`, `getConfi
 - **Doppelt laden verhindern:** Am Anfang prüfen, ob dein Element schon existiert.
 - **Nicht auf Dashboard-Klassen verlassen:** ZimaOS ändert sein DOM zwischen Versionen. Eigene, fixierte Elemente (`position: fixed`) sind am robustesten.
 - **Präfix für CSS-Klassen**, zum Beispiel `.mein-mod-…`, damit nichts kollidiert.
-- **Rücksicht nehmen:** Bei `document.hidden` pausieren und `prefers-reduced-motion` respektieren.
+- **Rücksicht nehmen:** Bei `document.hidden` pausieren; bei `F.effects.reducedMotion()` ruhiger animieren (weniger, langsamer) statt ganz abzuschalten – sonst wirkt der Mod für viele Windows-Nutzer kaputt.
 - **z-index niedrig halten** (unter 100), damit Fenster von ZimaOS wie der App Store darüber liegen. Widgets am besten in die Widget-Spalte einhängen (siehe Forge Pulse).
 - **Keine Geheimnisse** in `config` speichern. Einstellungen sind ohne Anmeldung lesbar.
 

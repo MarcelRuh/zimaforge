@@ -1,18 +1,21 @@
 // Forge Sparks – aufsteigende Neon-Funken als Overlay (klick-durchlässig).
 (() => {
   "use strict";
-  if (document.querySelector("canvas.zf-sparks")) return;
-  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const F = window.ZimaForge;
+  if (!F?.effects || document.querySelector("canvas.zf-sparks")) return;
+
+  // „Bewegung reduzieren“: ruhiger statt aus – weniger und langsamere Funken.
+  const CALM = F.effects.reducedMotion();
+  const DENSITY = CALM ? 0.4 : 1;
+  const SPEED = CALM ? 0.45 : 1;
 
   const COLORS = ["255,0,110", "131,56,236", "0,180,216"];
   const canvas = document.createElement("canvas");
   canvas.className = "zf-sparks";
-  canvas.setAttribute("aria-hidden", "true");
-  Object.assign(canvas.style, {
-    position: "fixed", inset: "0", width: "100vw", height: "100vh",
-    pointerEvents: "none", zIndex: "1", mixBlendMode: "screen",
-  });
-  document.body.append(canvas);
+  // Eigene Ebene über dem Dashboard; ausgeblendet, solange ein ZimaOS-Fenster offen ist.
+  F.effects.layer(canvas);
+  canvas.style.mixBlendMode = "screen";
+  F.dashboard?.ignore(canvas);
 
   const ctx = canvas.getContext("2d");
   let w = 0, h = 0, dpr = 1;
@@ -38,11 +41,11 @@
   const spawn = (initial) => ({
     x: Math.random() * w,
     y: initial ? Math.random() * h : h + 10,
-    vy: 18 + Math.random() * 42,
-    vx: (Math.random() - 0.5) * 10,
+    vy: (18 + Math.random() * 42) * SPEED,
+    vx: (Math.random() - 0.5) * 10 * SPEED,
     size: 6 + Math.random() * 11,
     life: 0,
-    max: 6 + Math.random() * 9,
+    max: (6 + Math.random() * 9) / SPEED,
     phase: Math.random() * Math.PI * 2,
     sprite: sprites[(Math.random() * sprites.length) | 0],
   });
@@ -54,7 +57,7 @@
     canvas.width = w * dpr;
     canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    const target = Math.round(Math.min(70, (w * h) / 26000));
+    const target = Math.round(Math.min(70, (w * h) / 26000) * DENSITY);
     while (sparks.length < target) sparks.push(spawn(true));
     sparks.length = target;
   }
