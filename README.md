@@ -34,13 +34,20 @@ Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im
 
 ## Installation auf ZimaOS
 
-1. Die Datei **`zimaforge-docker-compose.yml`** aus dem [neuesten Release](https://github.com/MarcelRuh/zimaforge/releases/latest) herunterladen.
-2. In ZimaOS **App Store → Benutzerdefinierte App installieren** öffnen.
-3. Oben rechts auf **Import** klicken und die Datei wählen. Alternativ zum Reiter **YAML** wechseln und den Inhalt einfügen.
-4. Das Formular füllt sich von selbst (Image `ghcr.io/marcelruh/zimaforge`, Netzwerk *host*, Port *8077*). Dann **Installieren** klicken.
-5. Die ZimaForge-Kachel öffnen und wie gewohnt bei ZimaOS anmelden. Der Store öffnet sich automatisch. Später erreichst du ihn über das **Sechseck unten rechts** oder mit <kbd>Alt</kbd>+<kbd>⇧</kbd>+<kbd>F</kbd>.
+### Per Docker-Compose-Import (empfohlen, ohne SSH)
 
-Alternativ per SSH:
+1. In ZimaOS den **App Store** öffnen und oben rechts **„+“ → Benutzerdefinierte App installieren** wählen.
+2. Im Dialog oben rechts auf **Import** klicken und **Docker Compose** wählen.
+3. Die Compose-Datei angeben, auf einem von zwei Wegen:
+   - **Einfügen:** den Inhalt von [`docker-compose.yml`](docker-compose.yml) kopieren. Auf GitHub geht das über das Kopier-Symbol „Copy raw file“ oben rechts in der Dateiansicht. Dann in das Textfeld einfügen.
+   - **Hochladen:** `zimaforge-docker-compose.yml` aus dem [neuesten Release](https://github.com/MarcelRuh/zimaforge/releases/latest) herunterladen und auswählen.
+4. Mit **Absenden** bzw. **Importieren** bestätigen. Das Formular füllt sich von selbst. Prüfe kurz: Bildname `ghcr.io/marcelruh/zimaforge`, **Netzwerktyp `host`** (nicht *bridge*), Port **8077**.
+5. Unten rechts auf **Installieren** klicken.
+6. Die Kachel *ZimaForge* öffnen und wie gewohnt bei ZimaOS anmelden. Der Store öffnet sich automatisch. Später erreichst du ihn über das **Sechseck unten rechts** oder mit <kbd>Alt</kbd>+<kbd>⇧</kbd>+<kbd>F</kbd>.
+
+Der fertige YAML-Block zum Kopieren steht auch in den Notizen jedes [Releases](https://github.com/MarcelRuh/zimaforge/releases/latest).
+
+### Per SSH
 
 ```bash
 mkdir -p /DATA/AppData/zimaforge && cd /DATA/AppData/zimaforge

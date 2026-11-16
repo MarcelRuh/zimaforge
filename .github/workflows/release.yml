@@ -116,9 +116,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          changes="$(awk -v h="## [$version]" 'index($0,h)==1 {f=1; next} /^## / && f {exit} f' CHANGELOG.md)"
-          { cat docs/release-install.md; echo; echo "${changes:-Siehe CHANGELOG.md}"; } > notes.md
+          sh dev/release-notes.sh "${GITHUB_REF_NAME#v}" > notes.md
           cp docker-compose.yml zimaforge-docker-compose.yml
           gh release create "$GITHUB_REF_NAME" --title "ZimaForge $GITHUB_REF_NAME" \
             --notes-file notes.md zimaforge-docker-compose.yml
