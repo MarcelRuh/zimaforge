@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.0] – 2026-11-16
 
 ### Neu
 - `/_forge/api/system`: Detailwerte wie in btop – Auslastung je Kern, Kerntemperaturen (coretemp/k10temp), CPU-Modell und Takt, RAM-Aufteilung (belegt, Cache, frei, Swap), Belegung des DATA-Laufwerks, Lese-/Schreibzähler, Netzwerk je Schnittstelle, Top-Prozesse und Verbrauch je App (Prozesse über cgroups den Docker-Containern zugeordnet).

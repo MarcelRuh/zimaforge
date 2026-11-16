@@ -2,7 +2,7 @@ name: zimaforge
 
 services:
   zimaforge:
-    image: ghcr.io/marcelruh/zimaforge:0.2.1
+    image: ghcr.io/marcelruh/zimaforge:0.3.0
     container_name: zimaforge
     # Host-Netzwerk: ZimaForge erreicht das ZimaOS-Gateway auf 127.0.0.1:80.
     network_mode: host
@@ -58,6 +58,6 @@ x-casaos:
     de_de: >-
       ZimaForge sitzt vor dem ZimaOS-Dashboard und lädt JavaScript- und CSS-Mods.
       Ein einzelnes Rust-Binary, eingebauter Mod-Store, ZimaMOD-kompatibel, abgesichert über die ZimaOS-Anmeldung.
-  version: "0.2.1"
+  version: "0.3.0"
   repo: https://github.com/MarcelRuh/zimaforge
   support: https://github.com/MarcelRuh/zimaforge/issues
