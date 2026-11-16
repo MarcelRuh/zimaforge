@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.3.5] – 2026-11-16
 
 ### Neu
 - Widgets lassen sich an die Uhr heften: `mountWidget(el, { before | after: "clock", pin: true })`. Die Uhr erkennt ZimaForge an der angezeigten Uhrzeit.
