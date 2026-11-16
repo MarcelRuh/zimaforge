@@ -7,6 +7,9 @@ Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](http
 ### Behoben
 - App-Icon in ZimaOS fehlte bei Installationen aus der Compose-Datei von v0.1.x (`assets/icon.svg` war mit dem neuen Logo entfernt worden). Die Datei ist zurück und enthält das neue Logo.
 
+### Geändert
+- Forge Pulse 2.4.2: Der RAM-Tab zeigt den Verbrauch je App in MB/GB statt in Prozent (Prozent im Tooltip).
+
 ## [0.3.3] – 2026-11-16
 
 ### Performance

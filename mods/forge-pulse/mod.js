@@ -176,8 +176,9 @@
       const icon = g.icon
         ? `<img src="${esc(g.icon)}" alt="" loading="lazy">`
         : `<span class="zf-pulse-app-dot">${esc(g.title[0]?.toUpperCase())}</span>`;
-      const tip = key === "mem" ? fmtBytes(g.mem) : `${g.cpu.toFixed(2)} % der gesamten CPU`;
-      return `<li title="${esc(tip)}">${icon}<span class="zf-pulse-app-name">${esc(g.title)}</span><b>${value(g).toFixed(1)}%</b></li>`;
+      const tip = key === "mem" ? `${((g.mem / total) * 100).toFixed(1)} % des RAM` : `${g.cpu.toFixed(2)} % der gesamten CPU`;
+      const shown = key === "mem" ? fmtBytes(g.mem) : `${g.cpu.toFixed(1)}%`;
+      return `<li title="${esc(tip)}">${icon}<span class="zf-pulse-app-name">${esc(g.title)}</span><b>${shown}</b></li>`;
     }).join("")}</ul>`;
   };
 
