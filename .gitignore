@@ -1,0 +1,5 @@
+/target
+/dev-data
+*.tmp
+.DS_Store
+Thumbs.db

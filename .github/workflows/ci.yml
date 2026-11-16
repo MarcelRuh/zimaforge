@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    name: Rust (fmt, clippy, test)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
+
+  javascript:
+    name: JavaScript-Syntax
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+      - name: node --check
+        run: |
+          set -e
+          for f in runtime/*.js; do node --check --input-type=module < "$f"; echo "ok $f"; done
+          for f in $(find mods examples -name '*.js'); do node --check "$f"; echo "ok $f"; done
+
+  docker:
+    name: Docker-Build (${{ matrix.arch }})
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          load: true
+          tags: zimaforge:ci
+          cache-from: type=gha,scope=${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
+      - name: Smoke-Test
+        run: |
+          set -e
+          docker run --rm zimaforge:ci --version
+          docker run -d --name zf -p 8077:8077 zimaforge:ci
+          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8077/_forge/api/health && break; sleep 1; done
+          curl -fsS http://127.0.0.1:8077/_forge/api/store | grep -q forge-pulse
+          curl -fsS http://127.0.0.1:8077/_forge/runtime/loader.js | grep -q ZimaForge
+          docker rm -f zf

@@ -1,0 +1,11 @@
+{
+  "name": "Mein Mod",
+  "version": "0.1.0",
+  "description": "Vorlage für einen eigenen ZimaForge-Mod.",
+  "category": "Allgemein",
+  "authors": [{ "name": "Dein Name", "url": "https://github.com/dein-name" }],
+  "origin": { "type": "native", "source": "https://github.com/dein-name/mein-mod" },
+  "tags": ["beispiel"],
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}

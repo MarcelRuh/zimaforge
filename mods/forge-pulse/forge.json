@@ -1,0 +1,12 @@
+{
+  "name": "Forge Pulse",
+  "version": "1.0.0",
+  "description": "Schwebendes Live-Widget für CPU, RAM, Temperatur, Netzwerk und Laufzeit des Servers – verschiebbar, einklappbar, im ora-Neon-Look.",
+  "category": "Widgets",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/forge-pulse" },
+  "tags": ["system", "monitor", "cpu", "ram", "widget"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}

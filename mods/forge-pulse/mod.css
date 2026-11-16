@@ -1,0 +1,65 @@
+.zf-pulse {
+  position: fixed;
+  z-index: 2147482000;
+  top: 84px;
+  right: 24px;
+  width: 232px;
+  color: #fff;
+  font: 12px/1.4 "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  border: 1px solid #8338ec5a;
+  border-radius: 6px;
+  background:
+    radial-gradient(ellipse 80% 50% at 0% 0%, #8338ec2a, transparent 70%),
+    #0a0a0fd9;
+  backdrop-filter: blur(14px) saturate(1.3);
+  box-shadow: 0 14px 40px #00000080, 0 0 24px #8338ec26;
+  user-select: none;
+  transition: box-shadow .2s, border-color .2s;
+}
+.zf-pulse:hover { border-color: #8338ec99; }
+.zf-pulse.dragging { box-shadow: 0 20px 50px #000000a0, 0 0 30px #ff006e40; }
+.zf-pulse.offline { opacity: .65; }
+.zf-pulse.offline .zf-pulse-led { background: #ff5400; box-shadow: 0 0 8px #ff5400; animation: none; }
+
+.zf-pulse-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 8px 8px 12px; cursor: grab; touch-action: none;
+  border-bottom: 1px solid #8338ec2e;
+}
+.zf-pulse.dragging .zf-pulse-head { cursor: grabbing; }
+.zf-pulse-title {
+  display: flex; align-items: center; gap: 8px;
+  font: 800 11px/1 "ZF Orbitron", "Orbitron", sans-serif; letter-spacing: .26em; color: #00b4d8;
+}
+.zf-pulse-led {
+  width: 7px; height: 7px; border-radius: 50%; background: #06d6a0; box-shadow: 0 0 8px #06d6a0;
+  animation: zf-pulse-beat 2s ease-in-out infinite;
+}
+@keyframes zf-pulse-beat { 50% { opacity: .35; } }
+.zf-pulse-toggle {
+  width: 24px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: 4px;
+  background: none; color: #a0a0b8; font: 700 15px/1 system-ui; cursor: pointer;
+}
+.zf-pulse-toggle:hover { color: #fff; background: #171726; border-color: #8338ec2e; }
+.zf-pulse-toggle:focus-visible { outline: 2px solid #00b4d8; outline-offset: 1px; }
+
+.zf-pulse-body { padding: 10px 12px 12px; display: grid; gap: 8px; }
+.zf-pulse.collapsed .zf-pulse-body { display: none; }
+.zf-pulse.collapsed .zf-pulse-head { border-bottom: 0; }
+
+.zf-pulse-row { display: grid; grid-template-columns: 34px 44px 1fr; align-items: center; gap: 6px; }
+.zf-pulse-row span { color: #6c6c8a; font-weight: 700; font-size: 10.5px; letter-spacing: .12em; }
+.zf-pulse-row b { font: 700 13px/1 "ZF Orbitron", "Orbitron", sans-serif; font-variant-numeric: tabular-nums; }
+.zf-pulse-row canvas { width: 120px; height: 26px; justify-self: end; }
+.zf-pulse-row.hot b, .zf-pulse-facts .hot { color: #ff006e; text-shadow: 0 0 10px #ff006e; }
+
+.zf-pulse-facts {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 6px 10px; margin: 2px 0 0; padding-top: 8px;
+  border-top: 1px solid #8338ec2e;
+}
+.zf-pulse-facts div { display: flex; justify-content: space-between; gap: 6px; min-width: 0; }
+.zf-pulse-facts .wide { grid-column: 1 / -1; }
+.zf-pulse-facts dt { color: #6c6c8a; }
+.zf-pulse-facts dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) { .zf-pulse-led { animation: none; } }

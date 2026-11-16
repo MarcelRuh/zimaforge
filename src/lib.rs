@@ -1,0 +1,36 @@
+//! ZimaForge – Mod-Framework für das ZimaOS-Dashboard.
+//!
+//! Ein einzelnes Rust-Binary sitzt als Reverse-Proxy vor dem ZimaOS-Gateway,
+//! schleust einen kleinen Loader in das Dashboard ein und stellt eine API für
+//! Mods, Store, Einstellungen und Systemwerte bereit.
+
+pub mod api;
+pub mod auth;
+pub mod config;
+pub mod inject;
+pub mod metrics;
+pub mod mods;
+pub mod proxy;
+pub mod state;
+
+use axum::Router;
+use axum::http::{HeaderValue, header};
+use tower_http::set_header::SetResponseHeaderLayer;
+use tower_http::trace::TraceLayer;
+
+pub use config::Config;
+pub use state::AppState;
+
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Vollständige Anwendung: eigene Routen, alles andere an ZimaOS.
+pub fn app(state: AppState) -> Router {
+    api::router()
+        .fallback(proxy::forward)
+        .layer(SetResponseHeaderLayer::if_not_present(
+            header::HeaderName::from_static("x-zimaforge-version"),
+            HeaderValue::from_static(VERSION),
+        ))
+        .layer(TraceLayer::new_for_http())
+        .with_state(state)
+}

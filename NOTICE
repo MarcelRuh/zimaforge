@@ -1,0 +1,20 @@
+ZimaForge
+Copyright (c) 2026 ZimaForge Contributors
+
+Danksagungen
+------------
+
+Die Idee, das ZimaOS-Dashboard über einen vorgeschalteten Reverse-Proxy um Mods
+zu erweitern, sowie die Beobachtung, dass ZimaOS hinter einem Proxy auf
+/v2/settings/fe.custom mit HTTP 400 antwortet, stammen aus ZimaMOD
+(https://github.com/metisro/ZimaMOD, Apache License 2.0). ZimaForge ist eine
+eigenständige Neuimplementierung und enthält keinen Code aus ZimaMOD.
+
+Das Mod-Format zimamod.json und die window.ZimaMOD-Schnittstelle werden aus
+Kompatibilitätsgründen unterstützt. CasaMOD: https://github.com/Cp0204/CasaMOD
+
+Schriftart
+----------
+
+Orbitron – Copyright 2018 The Orbitron Project Authors, SIL Open Font License 1.1
+(runtime/fonts/OFL.txt).

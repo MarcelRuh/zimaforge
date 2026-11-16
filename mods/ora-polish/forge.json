@@ -1,0 +1,11 @@
+{
+  "name": "ora Polish",
+  "version": "1.0.0",
+  "description": "Feinschliff im ora-Design für das ganze Dashboard: pinke Textauswahl, schlanke Neon-Scrollbars, cyanfarbene Fokusrahmen und eine dezente Vignette.",
+  "category": "Design",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/ora-polish" },
+  "tags": ["theme", "design", "ora"],
+  "icon": "icon.svg",
+  "styles": ["mod.css"]
+}
