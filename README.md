@@ -34,10 +34,11 @@ Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im
 
 ## Installation auf ZimaOS
 
-1. In ZimaOS **App Store → Eigene App installieren → Import** wählen und die [`docker-compose.yml`](docker-compose.yml) einfügen.
-2. Installieren. ZimaForge startet auf Port **8077**.
-3. Das Dashboard über `http://<ZIMAOS-IP>:8077` öffnen und wie gewohnt bei ZimaOS anmelden.
-4. Den Store über das **Sechseck unten rechts** oder mit <kbd>Alt</kbd>+<kbd>⇧</kbd>+<kbd>F</kbd> öffnen.
+1. Die Datei **`zimaforge-docker-compose.yml`** aus dem [neuesten Release](https://github.com/MarcelRuh/zimaforge/releases/latest) herunterladen.
+2. In ZimaOS **App Store → Benutzerdefinierte App installieren** öffnen.
+3. Oben rechts auf **Import** klicken und die Datei wählen. Alternativ zum Reiter **YAML** wechseln und den Inhalt einfügen.
+4. Das Formular füllt sich von selbst (Image `ghcr.io/marcelruh/zimaforge`, Netzwerk *host*, Port *8077*). Dann **Installieren** klicken.
+5. Die ZimaForge-Kachel öffnen und wie gewohnt bei ZimaOS anmelden. Der Store öffnet sich automatisch. Später erreichst du ihn über das **Sechseck unten rechts** oder mit <kbd>Alt</kbd>+<kbd>⇧</kbd>+<kbd>F</kbd>.
 
 Alternativ per SSH:
 
