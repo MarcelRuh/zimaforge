@@ -2,7 +2,7 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
-## [Unveröffentlicht]
+## [0.2.0] – 2026-11-16
 
 ### Neu
 - Neues Logo (ZimaOS Toolkit) für App-Icon, Launcher, Store und README.

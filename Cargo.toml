@@ -1,6 +1,6 @@
 [package]
 name = "zimaforge"
-version = "0.1.1"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
 description = "Mod framework for the ZimaOS dashboard – a single, fast Rust binary in the ora design."
