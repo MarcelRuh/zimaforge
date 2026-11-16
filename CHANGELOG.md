@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [Unveröffentlicht]
+
+### Geändert
+- Forge Pulse 2.1: liest CPU, RAM, Temperatur und Leistung bevorzugt aus derselben ZimaOS-Schnittstelle wie das System-Widget (`/v1/sys/utilization`), damit die Werte übereinstimmen; sonst eigene Messung.
+- Forge Pulse: Details mit CPU/RAM-Tabs wie bei ZimaOS, eine Zeile pro Wert (keine Überschneidungen mehr).
+
+### Neu
+- Forge Pulse: ☰-Button öffnet den Ressourcenmonitor von ZimaOS (klappt das System-Widget bei Bedarf auf).
+
 ## [0.2.0] – 2026-11-16
 
 ### Neu

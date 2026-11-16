@@ -34,13 +34,17 @@ const page = `<!doctype html>
   .modal{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#0008}
   .modal[hidden]{display:none}
   .modal section{width:min(900px,90vw);height:70vh;border-radius:16px;background:#f4f5f7;color:#222;padding:24px}
+  .hd{display:flex;justify-content:space-between;align-items:center}.chev{background:none;border:0;color:#fff;cursor:pointer;font-size:16px}
+  .tabs{display:flex;gap:12px;align-items:center;margin-top:10px}.tabs[hidden]{display:none}.tabs .menu{margin-left:auto;cursor:pointer}
 </style></head>
 <body><div id="app">
   <div class="bar"><b>ZimaOS</b><span>Mock-Dashboard für ZimaForge</span></div>
   <div class="layout">
     <aside class="widgets">
       <div class="widget"><div class="t">Uhr</div><div class="row">20:15</div></div>
-      <div class="widget"><div class="t">System</div><div class="row">CPU 3 % · RAM 7 %</div></div>
+      <div class="widget" id="sys"><div class="t hd"><span>System</span><button class="chev" type="button" aria-label="aufklappen">⌄</button></div>
+        <div class="row">CPU 3 % · RAM 7 %</div>
+        <div class="tabs" hidden><span>CPU</span><span>RAM</span><svg class="menu" viewBox="0 0 24 24" width="18" height="18"><path d="M4 7h16M4 12h16M4 17h16" stroke="#fff" stroke-width="2"/></svg></div></div>
       <div class="widget"><div class="t">Storage</div><div class="row">1,2 TB frei</div></div>
       <div class="widget"><div class="t">Network</div><div class="row">↓ 2 MB/s ↑ 300 KB/s</div></div>
     </aside>
@@ -51,6 +55,9 @@ const page = `<!doctype html>
     </div>
   </div>
   <button id="login" type="button"></button>
+  <div class="modal" id="monitor" role="dialog" aria-modal="true" hidden>
+    <section><h2>Ressourcenmonitor (Mock)</h2><p>Klick daneben schließt.</p></section>
+  </div>
   <div class="modal" id="appstore" role="dialog" aria-modal="true" hidden>
     <section><h2>App Store (Mock)</h2><p>Klick daneben schließt.</p></section>
   </div>
@@ -62,6 +69,10 @@ const page = `<!doctype html>
   sync();
   const store=document.getElementById("appstore");
   store.onclick=(e)=>{if(e.target===store)store.hidden=true};
+  const mon=document.getElementById("monitor");
+  mon.onclick=(e)=>{if(e.target===mon)mon.hidden=true};
+  document.querySelector("#sys .chev").onclick=()=>{const t=document.querySelector("#sys .tabs");t.hidden=!t.hidden};
+  document.querySelector("#sys .menu").addEventListener("click",()=>{mon.hidden=false});
   // Wie ZimaOS: Kachel öffnet die Web-URL der App (Host + port_map + index) in einem neuen Tab.
   const urls={ZimaForge:"8077/?forge",Jellyfin:"8096/"};
   document.querySelectorAll(".app").forEach(t=>t.onclick=()=>{
@@ -77,6 +88,16 @@ http
       const ok = req.headers.authorization === TOKEN;
       res.writeHead(ok ? 200 : 401, { "content-type": "application/json" });
       return res.end(ok ? '{"data":{"username":"admin"}}' : '{"message":"unauthorized"}');
+    }
+    if (url.pathname === "/v1/sys/utilization") {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      // Form wie CasaOS/ZimaOS: Prozentwerte direkt, Leistung als RAPL-Zähler (µJ).
+      const total = 16 * 1024 ** 3;
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ success: 200, data: {
+        cpu: { percent: 3, num: 4, temperature: 32, power: { timestamp: String(Date.now()), value: String(Math.round(performance.now() * 11000)) } },
+        mem: { total, available: total * 0.93, used: total * 0.07, usedPercent: 7 },
+      } }));
     }
     if (url.pathname === "/v2/settings/fe.custom") {
       res.writeHead(400);
