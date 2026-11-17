@@ -69,17 +69,30 @@ async fn shutdown() {
     tracing::info!("ZimaForge wird beendet");
 }
 
+/// Für den Docker-HEALTHCHECK: fragt `/_forge/api/health` an der Adresse ab, an der
+/// ZimaForge lauscht (`ZIMAFORGE_BIND`; 0.0.0.0 bzw. :: über die Loopback-Adresse).
 async fn healthcheck() -> i32 {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let port = std::env::var("ZIMAFORGE_PORT").unwrap_or_else(|_| "8077".into());
-    let Ok(mut stream) = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}")).await else {
+    let Ok(config) = zimaforge::Config::from_env() else {
         return 1;
     };
-    let req = "GET /_forge/api/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
-    if stream.write_all(req.as_bytes()).await.is_err() {
-        return 1;
+    let mut target = config.listen;
+    if target.ip().is_unspecified() {
+        target.set_ip(match target.ip() {
+            std::net::IpAddr::V4(_) => std::net::Ipv4Addr::LOCALHOST.into(),
+            std::net::IpAddr::V6(_) => std::net::Ipv6Addr::LOCALHOST.into(),
+        });
     }
-    let mut buf = Vec::new();
-    let _ = stream.read_to_end(&mut buf).await;
-    i32::from(!buf.starts_with(b"HTTP/1.1 200"))
+    let check = async {
+        let mut stream = tokio::net::TcpStream::connect(target).await.ok()?;
+        let req = "GET /_forge/api/health HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n";
+        stream.write_all(req.as_bytes()).await.ok()?;
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await.ok()?;
+        Some(buf.starts_with(b"HTTP/1.1 200"))
+    };
+    match tokio::time::timeout(std::time::Duration::from_secs(5), check).await {
+        Ok(Some(true)) => 0,
+        _ => 1,
+    }
 }

@@ -14,6 +14,8 @@ use tokio_tungstenite::tungstenite::Message;
 use zimaforge::{AppState, Config, app};
 
 const GOOD_TOKEN: &str = "zimaos-session-token";
+/// Angemeldet, aber kein Administrator.
+const USER_TOKEN: &str = "zimaos-user-token";
 
 async fn spawn(router: Router) -> SocketAddr {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -43,6 +45,7 @@ fn fake_zimaos() -> Router {
                     "forwardedHost": headers.get("x-forwarded-host").and_then(|v| v.to_str().ok()),
                     "forwardedPort": headers.get("x-forwarded-port").and_then(|v| v.to_str().ok()),
                     "realIp": headers.get("x-real-ip").and_then(|v| v.to_str().ok()),
+                    "forwardedFor": headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()),
                 }))
             }),
         )
@@ -51,9 +54,20 @@ fn fake_zimaos() -> Router {
             get(|headers: HeaderMap| async move {
                 if headers.get(header::AUTHORIZATION).is_some_and(|v| v == GOOD_TOKEN) {
                     (StatusCode::OK, "{\"data\":{\"username\":\"admin\"}}").into_response()
+                } else if headers.get(header::AUTHORIZATION).is_some_and(|v| v == USER_TOKEN) {
+                    (StatusCode::OK, "{\"data\":{\"username\":\"gast\",\"role\":\"user\"}}").into_response()
                 } else {
                     StatusCode::UNAUTHORIZED.into_response()
                 }
+            }),
+        )
+        .route(
+            "/download.bin",
+            get(|| async {
+                (
+                    [(header::CONTENT_TYPE, "application/octet-stream")],
+                    vec![7u8; 64 * 1024],
+                )
             }),
         )
         .route(
@@ -164,6 +178,12 @@ mod reqwest_lite {
         pub async fn get(&self, url: &str) -> Resp {
             self.send(Method::GET, url, &[], "").await
         }
+
+        /// Seitenaufruf wie ein Browser (Adresszeile).
+        pub async fn page(&self, url: &str) -> Resp {
+            let doc = [("sec-fetch-dest", "document"), ("accept", "text/html,*/*")];
+            self.send(Method::GET, url, &doc, "").await
+        }
     }
 }
 
@@ -172,7 +192,7 @@ use axum::http::Method;
 #[tokio::test]
 async fn injects_loader_into_dashboard_html() {
     let f = forge().await;
-    let r = f.http.get(&f.url("/")).await;
+    let r = f.http.page(&f.url("/")).await;
     assert_eq!(r.status, StatusCode::OK);
     assert!(r.body.contains("/_forge/runtime/loader.js?v="), "{}", r.body);
     assert!(r.body.contains("data-zimaforge-loader></script></head>"));
@@ -225,7 +245,7 @@ async fn fe_custom_workaround() {
 async fn upstream_down_gives_branded_502() {
     // Port 9 (discard) ist lokal praktisch nie belegt.
     let f = forge_with_upstream("http://127.0.0.1:9").await;
-    let r = f.http.get(&f.url("/")).await;
+    let r = f.http.page(&f.url("/")).await;
     assert_eq!(r.status, StatusCode::BAD_GATEWAY);
     assert!(r.body.contains("ZimaOS-Gateway nicht erreichbar"));
 }
@@ -356,8 +376,13 @@ async fn store_lifecycle_and_assets() {
         )
         .await;
     assert_eq!(r.status, StatusCode::OK);
-    let cfg: serde_json::Value =
-        serde_json::from_str(&f.http.get(&f.url("/_forge/api/config/neon")).await.body).unwrap();
+    let cfg: serde_json::Value = serde_json::from_str(
+        &f.http
+            .send(Method::GET, &f.url("/_forge/api/config/neon"), &auth, "")
+            .await
+            .body,
+    )
+    .unwrap();
     assert_eq!(cfg["config"]["color"], "pink");
 
     let r = f
@@ -436,7 +461,7 @@ async fn active_mods_carry_a_revision_stamp() {
     assert!(rev > 0);
 
     // Die Dashboard-Seite bringt aktive Mods, Einstellungen und Preloads gleich mit.
-    let page = f.http.get(&f.url("/")).await.body;
+    let page = f.http.page(&f.url("/")).await.body;
     let start = page
         .find(r#"<script type="application/json" id="zimaforge-boot">"#)
         .expect(&page);
@@ -445,9 +470,107 @@ async fn active_mods_carry_a_revision_stamp() {
     let boot: serde_json::Value = serde_json::from_str(json).unwrap();
     assert_eq!(boot["version"], zimaforge::VERSION);
     assert_eq!(boot["mods"][0]["id"], "neon");
-    assert!(boot["config"].get("zimaforge").is_some());
+    assert!(boot.get("config").is_none(), "Einstellungen nie in der Seite");
+
+    // Einstellungen: eine Anfrage, nur angemeldet.
+    let all = f.http.send(Method::GET, &f.url("/_forge/api/config"), &auth, "").await;
+    assert_eq!(all.status, StatusCode::OK);
+    let all: serde_json::Value = serde_json::from_str(&all.body).unwrap();
+    assert!(all["config"].get("zimaforge").is_some() && all["config"].get("neon").is_some());
+    assert_eq!(
+        f.http.get(&f.url("/_forge/api/config")).await.status,
+        StatusCode::UNAUTHORIZED
+    );
     assert!(page.contains(&format!(
         r#"<link rel="preload" as="script" href="/_forge/mods/neon/mod.js?v=1.0.0-{rev}">"#
     )));
     assert!(page.find("zimaforge-boot").unwrap() < page.find("data-zimaforge-loader").unwrap());
+}
+
+#[tokio::test]
+async fn injects_only_into_page_loads() {
+    let f = forge().await;
+    // HEAD: Kopfzeilen wie bei GET, aber nichts eingefügt.
+    let head = f
+        .http
+        .send(Method::HEAD, &f.url("/"), &[("sec-fetch-dest", "document")], "")
+        .await;
+    assert!(!head.body.contains("zimaforge"));
+    // HTML per fetch (z. B. Dateivorschau) bleibt unverändert.
+    let fetched = f
+        .http
+        .send(Method::GET, &f.url("/"), &[("sec-fetch-dest", "empty")], "")
+        .await;
+    assert_eq!(fetched.status, StatusCode::OK);
+    assert!(!fetched.body.contains("data-zimaforge-loader"));
+    // iframe-Seiten bekommen den Loader (er beendet sich dort selbst).
+    let frame = f
+        .http
+        .send(Method::GET, &f.url("/"), &[("sec-fetch-dest", "iframe")], "")
+        .await;
+    assert!(frame.body.contains("data-zimaforge-loader"));
+}
+
+#[tokio::test]
+async fn downloads_are_not_recompressed() {
+    let f = forge().await;
+    let r = f
+        .http
+        .send(Method::GET, &f.url("/download.bin"), &[("accept-encoding", "gzip")], "")
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(r.headers.get(header::CONTENT_ENCODING).is_none());
+    assert_eq!(r.headers.get(header::CONTENT_LENGTH).unwrap(), "65536");
+}
+
+#[tokio::test]
+async fn forwarded_for_cannot_be_spoofed() {
+    let f = forge().await;
+    let r = f
+        .http
+        .send(
+            Method::GET,
+            &f.url("/v1/sys/echo"),
+            &[("x-forwarded-for", "6.6.6.6")],
+            "",
+        )
+        .await;
+    let echo: serde_json::Value = serde_json::from_str(&r.body).unwrap();
+    assert_eq!(echo["forwardedFor"], "127.0.0.1");
+}
+
+#[tokio::test]
+async fn private_reads_and_admin_writes() {
+    let f = forge().await;
+    let admin = [("x-zimaforge", "1"), ("authorization", GOOD_TOKEN)];
+    let user = [("x-zimaforge", "1"), ("authorization", USER_TOKEN)];
+
+    // Einstellungen lesen: nur angemeldet (Rolle egal).
+    assert_eq!(
+        f.http.get(&f.url("/_forge/api/config/zimaforge")).await.status,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        f.http
+            .send(Method::GET, &f.url("/_forge/api/config/zimaforge"), &user, "")
+            .await
+            .status,
+        StatusCode::OK
+    );
+    // Installieren: nur Administratoren.
+    assert_eq!(
+        f.http
+            .send(Method::POST, &f.url("/_forge/api/store/neon"), &user, "")
+            .await
+            .status,
+        StatusCode::FORBIDDEN
+    );
+    // Einstellungen nur für installierte Mods.
+    assert_eq!(
+        f.http
+            .send(Method::PUT, &f.url("/_forge/api/config/gibts-nicht"), &admin, "{}")
+            .await
+            .status,
+        StatusCode::NOT_FOUND
+    );
 }

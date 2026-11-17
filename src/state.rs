@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crate::auth::SessionValidator;
+use crate::boot::BootCache;
 use crate::config::Config;
 use crate::metrics::MetricsReader;
 use crate::mods::ModStore;
@@ -16,6 +17,8 @@ pub struct AppState {
     pub store: ModStore,
     pub metrics: Arc<MetricsReader>,
     pub system: Arc<SystemReader>,
+    /// Zwischengespeicherte Startdaten für die Dashboard-Seite.
+    pub boot: BootCache,
     /// Serialisiert schreibende Store-Operationen.
     pub write_lock: Arc<tokio::sync::Mutex<()>>,
 }
@@ -34,6 +37,7 @@ impl AppState {
                 config.docker_dir.clone(),
             )),
             write_lock: Arc::default(),
+            boot: BootCache::default(),
             client,
             config: Arc::new(config),
         }

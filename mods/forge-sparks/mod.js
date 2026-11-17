@@ -82,11 +82,19 @@
     raf = requestAnimationFrame(frame);
   }
 
-  const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+  const start = () => { if (!raf && !F.effects.hidden(canvas)) { last = performance.now(); raf = requestAnimationFrame(frame); } };
   const stop = () => { cancelAnimationFrame(raf); raf = 0; };
 
-  addEventListener("resize", resize, { passive: true });
+  // Größenänderung höchstens einmal pro Bild verarbeiten.
+  let resizeQueued = false;
+  addEventListener("resize", () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => { resizeQueued = false; resize(); });
+  }, { passive: true });
+  // Pausieren im Hintergrund-Tab und solange ein ZimaOS-Fenster die Ebene verdeckt.
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  canvas.addEventListener("zimaforge:visibility", (e) => { if (e.detail.hidden) { stop(); ctx.clearRect(0, 0, w, h); } else start(); });
   resize();
   start();
 })();

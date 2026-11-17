@@ -91,6 +91,9 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
     let (mut parts, body) = req.into_parts();
     let path = parts.uri.path().to_owned();
     let is_get = parts.method == axum::http::Method::GET;
+    // Nur Seitenaufrufe bekommen den Loader – keine HEAD-Anfragen und kein HTML,
+    // das per fetch geladen wird (z. B. eine HTML-Datei in der Dateiverwaltung).
+    let document = is_get && is_document_request(&parts.headers);
     parts.uri = upstream_uri(&state.config.upstream, &parts.uri);
 
     let upgrade_value = parts.headers.get(header::UPGRADE).cloned();
@@ -103,7 +106,7 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
     }
     // Nur Seitenaufrufe (HTML) unkomprimiert anfordern, damit der Loader eingefügt
     // werden kann. Alles andere (JS, CSS, Bilder, API) bleibt komprimiert.
-    if is_document_request(&parts.headers) {
+    if document {
         parts.headers.remove(header::ACCEPT_ENCODING);
     }
     if let Some(host) = parts.headers.get(header::HOST).cloned() {
@@ -121,7 +124,8 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
         && let Ok(ip) = HeaderValue::from_str(&addr.ip().to_string())
     {
         parts.headers.insert("x-real-ip", ip.clone());
-        parts.headers.append("x-forwarded-for", ip);
+        // Ersetzen statt anhängen: Ein vom Client mitgeschickter Wert wäre gefälscht.
+        parts.headers.insert("x-forwarded-for", ip);
     }
 
     let upstream_req = Request::from_parts(parts, body);
@@ -162,7 +166,7 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
         return json_response(StatusCode::OK, r#"{"data":{}}"#);
     }
 
-    if should_inject(parts.status, &parts.headers) {
+    if document && should_inject(parts.status, &parts.headers) {
         let bytes = match http_body_util::Limited::new(body, MAX_HTML_BYTES).collect().await {
             Ok(collected) => collected.to_bytes(),
             Err(err) => {
@@ -170,11 +174,7 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
                 return gateway_error();
             }
         };
-        let store = state.store.clone();
-        let tags = match tokio::task::spawn_blocking(move || crate::boot::collect(&store)).await {
-            Ok((mods, config)) => crate::boot::head_tags(&mods, config),
-            Err(_) => loader_tag(),
-        };
+        let tags = state.boot.tags(&state.store).await;
         let html = inject(&bytes, &tags, LOADER_MARKER);
         parts.headers.remove(header::CONTENT_LENGTH);
         parts.headers.remove(header::ETAG);
@@ -208,7 +208,12 @@ fn should_inject(status: StatusCode, headers: &HeaderMap) -> bool {
         .get(header::CONTENT_ENCODING)
         .and_then(|v| v.to_str().ok())
         .is_none_or(|v| v.trim().eq_ignore_ascii_case("identity"));
-    status == StatusCode::OK && html && plain
+    // Sehr große HTML-Antworten unverändert durchreichen statt puffern.
+    let small = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok()?.parse::<usize>().ok())
+        .is_none_or(|len| len <= MAX_HTML_BYTES);
+    status == StatusCode::OK && html && plain && small
 }
 
 fn json_response(status: StatusCode, body: &'static str) -> Response<Body> {

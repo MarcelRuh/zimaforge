@@ -1,0 +1,16 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Minor- und Patch-Updates als ein gemeinsamer PR, Major-Updates einzeln.
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]

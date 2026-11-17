@@ -2,6 +2,36 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.5.0] – 2026-11-17
+
+Durchsicht des gesamten Projekts.
+
+### Sicherheit
+- Mods installieren, entfernen, umschalten und Einstellungen speichern dürfen nur noch ZimaOS-Administratoren (Rolle aus `/v1/users/current`).
+- Mod-Einstellungen sind nur noch mit gültiger ZimaOS-Sitzung lesbar und stehen nicht mehr in der ausgelieferten Seite (also auch nicht auf der Anmeldeseite). Der Loader holt sie angemeldet mit **einer** Anfrage (`/_forge/api/config`).
+- Einstellungen lassen sich nur für ZimaForge selbst und installierte Mods anlegen.
+- `X-Forwarded-For` wird ersetzt statt ergänzt; ein mitgeschickter Wert kann ZimaOS nichts vortäuschen.
+- Docker: `no-new-privileges` und nicht benötigte Capabilities entfernt (Compose-Dateien).
+
+### Behoben
+- Downloads, Videos und Archive aus ZimaOS wurden unterwegs neu komprimiert (CPU-Last, keine Größenangabe, kein Fortsetzen). Komprimiert wird jetzt nur Text.
+- HEAD-Anfragen und per `fetch` geladene HTML-Dateien (z. B. Dateivorschau) bekamen den Loader eingefügt; sehr große HTML-Dateien endeten mit 502.
+- Healthcheck beachtet `ZIMAFORGE_BIND` und hat eine Zeitgrenze.
+- Store: Fokus bleibt nach Klicks auf dem Bedienelement; Scrollsperre wird beim Schließen sicher gelöst; der aktuelle Bereich wird Screenreadern richtig gemeldet; ältere Antworten überschreiben keine neueren; Update-Prüfung respektiert die Einstellung auch beim direkten Öffnen und fragt GitHub nach einem Fehler 15 Minuten nicht erneut.
+- Zwei angeheftete Widgets mit demselben Anker verdrängten einander endlos.
+- Widget-Reihenfolge 1.1.1: Das gezogene Widget sprang während langsamen Ziehens zurück.
+- Forge Wetter 1.1.2: Die Ortssuche wurde von der Aktualisierung überschrieben; kein doppelter Abruf beim Speichern; nach Rückkehr in den Tab wird veraltetes Wetter nachgeladen; gespeicherte Orte werden geprüft.
+- Forge Pulse 2.5.5: kein „NaN %“ bei leeren Datenträgern; ☰ startet btop nicht doppelt; keine Abfragen, solange die Karte unsichtbar ist.
+- Emoji-Spur 1.1.1 läuft auch in Browsern ohne `Intl.Segmenter`.
+
+### Verbessert
+- Forge Schnee 1.1.1 zeichnet vorgerenderte Flocken statt teurem Schatten pro Flocke. Schnee und Forge Sparks 1.1.1 pausieren, solange ein ZimaOS-Fenster sie verdeckt (neues Ereignis `zimaforge:visibility`, `F.effects.hidden()`).
+- Weniger Arbeit pro Seitenaufruf: Startdaten werden 5 s zwischengespeichert (bei Änderungen sofort erneuert); gleichzeitige Abrufe von `/metrics` und `/system` teilen sich eine Messung; versionierte Dateien werden nicht mehr bei jedem Abruf gehasht.
+- Ohne Widget-Spalte (Anmeldeseite) sucht der Loader seltener und ignoriert Änderungen in Mod-Elementen.
+- Einstellungen werden beim Schreiben mit `fsync` gesichert; eine beschädigte `state.json` wird protokolliert.
+- Release: läuft nur für Tags auf `main`, prüft Format, Clippy und CHANGELOG, testet das veröffentlichte Image vor `latest`; korrekte OCI-Labels; Dependabot für Actions und Cargo.
+- Dokumentation: Mod-API in `docs/MODS.md` vollständig, Vorlage hält sich an die eigenen Regeln, README verweist auf die Compose-Dateien im Release.
+
 ## [0.4.0] – 2026-11-17
 
 ### Verbessert

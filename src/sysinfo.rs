@@ -308,6 +308,8 @@ pub struct SystemReader {
     last: Mutex<Option<Sample>>,
     names: Mutex<HashMap<String, Option<String>>>,
     known: Arc<StdMutex<KnownProcs>>,
+    /// Letztes Ergebnis: Gleichzeitige Abrufe teilen sich einen Durchlauf über `/proc`.
+    recent: Mutex<Option<(Instant, SystemDetail)>>,
 }
 
 fn read(path: &Path) -> Option<String> {
@@ -324,6 +326,7 @@ impl SystemReader {
             last: Mutex::default(),
             names: Mutex::default(),
             known: Arc::default(),
+            recent: Mutex::default(),
         }
     }
 
@@ -448,7 +451,18 @@ impl SystemReader {
         name
     }
 
+    /// Aktuelle Details; Abrufe innerhalb von 2 s bekommen denselben Durchlauf.
     pub async fn snapshot(&self) -> SystemDetail {
+        let mut recent = self.recent.lock().await;
+        if let Some((_, d)) = recent.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(2)) {
+            return d.clone();
+        }
+        let d = self.measure().await;
+        *recent = Some((Instant::now(), d.clone()));
+        d
+    }
+
+    async fn measure(&self) -> SystemDetail {
         let proc_dir = self.proc_dir.clone();
         let known = self.known.clone();
         let take = move || Self::sample(&proc_dir, &known);
@@ -730,14 +744,14 @@ mod tests {
         write_proc(12, "sshd", 0, false);
 
         let reader = SystemReader::new(proc_dir.clone(), tmp.path().join("sys"), tmp.path().into(), docker);
-        let _ = reader.snapshot().await; // Basis
+        let _ = reader.measure().await; // Basis (ohne 2-s-Zwischenspeicher)
         // 200 Ticks vergehen, davon 30 + 20 in Plex, 10 in sshd
         std::fs::write(proc_dir.join("stat"), "cpu  60 0 0 1140 0 0 0 0\ncpu0 60 0 0 1140 0\n").unwrap();
         write_proc(10, "Plex Media Serv", 30, true);
         write_proc(11, "Plex Transcoder", 20, true);
         write_proc(12, "sshd", 10, false);
         tokio::time::sleep(Duration::from_millis(550)).await;
-        let d = reader.snapshot().await;
+        let d = reader.measure().await;
 
         assert_eq!(d.cpu.cores, vec![Some(30.0)]);
         assert_eq!(d.processes[0].name, "Plex Media Serv");

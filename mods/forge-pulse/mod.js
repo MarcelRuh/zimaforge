@@ -88,7 +88,6 @@
   let tab = "cpu";
   let detail = null; // letzte /system-Antwort
   let prevDetail = null; // vorletzte – für Raten (Disk, Netz)
-  let gaugeData = null;
 
   const setOpen = (open) => {
     details.hidden = !open;
@@ -106,7 +105,13 @@
   };
   head.addEventListener("click", () => setOpen(details.hidden));
   card.querySelectorAll("[data-tab]").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
-  card.querySelector(".zf-pulse-menu").addEventListener("click", () => void openResourceMonitor());
+  // Während btop startet, keine zweite Anfrage (sonst zwei Fenster und verschachtelte window.open-Wächter).
+  const menuBtn = card.querySelector(".zf-pulse-menu");
+  menuBtn.addEventListener("click", async () => {
+    if (menuBtn.disabled) return;
+    menuBtn.disabled = true;
+    try { await openResourceMonitor(); } finally { menuBtn.disabled = false; }
+  });
   try { tab = localStorage.getItem(TAB_KEY) || "cpu"; } catch { /* egal */ }
   setTab(tab);
   try { setOpen(localStorage.getItem(OPEN_KEY) === "1"); } catch { setOpen(false); }
@@ -229,7 +234,7 @@
     } else if (tab === "disk") {
       html += (d.disks ?? []).map((k) => `
         <div class="zf-pulse-disk"><div class="zf-pulse-row"><dt>${esc(k.label)}</dt><dd>${fmtBytes(k.used)} von ${fmtBytes(k.total)}</dd></div>
-        ${bar((k.used / k.total) * 100, k.used / k.total > 0.9 ? "hot" : "")}
+        ${bar(k.total ? (k.used / k.total) * 100 : 0, k.total && k.used / k.total > 0.9 ? "hot" : "")}
         <div class="zf-pulse-row zf-pulse-muted"><dt>frei</dt><dd>${fmtBytes(k.free)}</dd></div></div>`).join("")
         || '<p class="zf-pulse-muted">Keine Datenträgerinfo.</p>';
       html += `<dl class="zf-pulse-list">
@@ -335,6 +340,7 @@
     note.hidden = true;
     // Fenster sofort im Klick öffnen – nach dem await würde ein Popup-Blocker zuschlagen.
     const win = window.open("", "_blank");
+    if (win) win.opener = null; // btop-Seite soll das Dashboard nicht steuern können
     try {
       const res = await fetch("/v2/zimaos/tty/btop", {
         method: "POST",
@@ -443,7 +449,8 @@
   let detailTick = 0;
 
   async function tick() {
-    if (busy) return;
+    // Nicht abfragen, solange die Karte nicht zu sehen ist (Anmeldeseite, ausgehängt).
+    if (busy || !card.isConnected || card.style.display === "none") return;
     busy = true;
     try {
       // Details (Prozess-Scan auf dem Server) nur jeden zweiten Takt, also alle 6 s.
@@ -463,7 +470,6 @@
       if (watts != null) lastWatts = watts;
       const temp = z?.temperature ?? m?.temperature;
       const memTotal = z?.memTotal ?? m?.memTotal;
-      gaugeData = { watts, temp, load: m?.load, uptime: m?.uptimeSeconds };
       setGauge("cpu", z?.cpuPercent ?? m?.cpuPercent,
         [watts != null ? `${watts.toFixed(1)} W` : null, temp != null ? `${temp.toFixed(1)} °C` : null].filter(Boolean).join(" / ") || "–");
       setGauge("mem", z?.memPercent ?? m?.memPercent, memTotal ? fmtBytes(memTotal) : "–");

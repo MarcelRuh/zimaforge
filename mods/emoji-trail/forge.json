@@ -1,6 +1,6 @@
 {
   "name": "Emoji-Spur",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Eine kurze Spur aus Emojis folgt Maus und Finger. Die Emojis lassen sich in den Mod-Einstellungen ändern (Feld „emojis“).",
   "category": "Spaß",
   "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],

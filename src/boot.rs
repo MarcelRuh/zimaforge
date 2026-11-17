@@ -1,41 +1,71 @@
 //! Startdaten, die mit dem Loader in jede Dashboard-Seite eingefügt werden.
 //!
-//! Ohne sie wartet der Browser nacheinander auf `/_forge/api/mods`, dann auf die
-//! Mod-Dateien, dann auf die Einstellungen jedes Mods. Mit ihnen steht alles schon
-//! im HTML, und die Mod-Dateien laden parallel zu ZimaOS (`preload`).
+//! Ohne sie wartet der Browser erst auf `/_forge/api/mods` und dann auf die
+//! Mod-Dateien. Mit ihnen steht die Mod-Liste schon im HTML, und die Mod-Dateien
+//! laden parallel zu ZimaOS (`preload`). Einstellungen stehen bewusst **nicht** darin:
+//! Die Seite sieht auch, wer nicht angemeldet ist (Anmeldeseite). Der Loader holt sie
+//! angemeldet mit einer einzigen Anfrage (`/_forge/api/config`).
+
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use serde_json::{Map, Value, json};
+use tokio::sync::Mutex;
 
-use crate::mods::{ModInfo, ModStore};
+use crate::mods::{CORE_CONFIG_ID, ModInfo, ModStore};
 use crate::proxy::loader_tag;
 
-/// Einstellungen von ZimaForge selbst (Launcher, Update-Prüfung).
-const CORE_CONFIG_ID: &str = "zimaforge";
-
-/// Liest aktive Mods und ihre Einstellungen (blockierend, im Hintergrund aufrufen).
-pub fn collect(store: &ModStore) -> (Vec<ModInfo>, Map<String, Value>) {
-    let mods = store.active();
+/// Einstellungen von ZimaForge selbst und aller aktiven Mods (blockierend).
+pub fn configs(store: &ModStore) -> Map<String, Value> {
     let mut config = Map::new();
+    let mods = store.active();
     for id in std::iter::once(CORE_CONFIG_ID).chain(mods.iter().map(|m| m.id.as_str())) {
         if let Ok(value) = store.read_config(id) {
             config.insert(id.to_owned(), value);
         }
     }
-    (mods, config)
+    config
+}
+
+/// Wie lange die fertigen Tags wiederverwendet werden. Installieren, Entfernen und
+/// Umschalten leeren den Zwischenspeicher sofort; die Frist fängt Änderungen ab,
+/// die direkt im Mod-Ordner gemacht werden.
+const CACHE_TTL: Duration = Duration::from_secs(5);
+
+/// Zwischenspeicher für die eingefügten Tags – jede Seite (und jedes iframe) würde
+/// sonst den Mod-Ordner samt Änderungszeiten neu einlesen.
+#[derive(Clone, Default)]
+pub struct BootCache(Arc<Mutex<Option<Cached>>>);
+
+/// Fertige Tags und wann sie erzeugt wurden.
+type Cached = (Instant, Arc<str>);
+
+impl BootCache {
+    pub async fn tags(&self, store: &ModStore) -> Arc<str> {
+        let mut slot = self.0.lock().await;
+        if let Some((_, tags)) = slot.as_ref().filter(|(at, _)| at.elapsed() < CACHE_TTL) {
+            return tags.clone();
+        }
+        let store = store.clone();
+        let tags: Arc<str> = match tokio::task::spawn_blocking(move || head_tags(&store.active())).await {
+            Ok(tags) => tags.into(),
+            Err(_) => loader_tag().into(),
+        };
+        *slot = Some((Instant::now(), tags.clone()));
+        tags
+    }
+
+    pub async fn invalidate(&self) {
+        *self.0.lock().await = None;
+    }
 }
 
 /// Alles, was vor `</head>` eingefügt wird: Startdaten, Preload-Hinweise und der Loader.
-pub fn head_tags(mods: &[ModInfo], config: Map<String, Value>) -> String {
+pub fn head_tags(mods: &[ModInfo]) -> String {
     let v = encode_component(crate::VERSION);
     let mut out = String::new();
 
-    let boot = json!({ "version": crate::VERSION, "mods": mods, "config": config });
-    // In <script> darf kein „</script>“ entstehen: <, > und & als JSON-Escapes.
-    let boot = boot
-        .to_string()
-        .replace('<', "\\u003c")
-        .replace('>', "\\u003e")
-        .replace('&', "\\u0026");
+    let boot = script_json(&json!({ "version": crate::VERSION, "mods": mods }));
     out.push_str(&format!(
         r#"<script type="application/json" id="zimaforge-boot">{boot}</script>"#
     ));
@@ -63,6 +93,16 @@ pub fn head_tags(mods: &[ModInfo], config: Map<String, Value>) -> String {
 
     out.push_str(&loader_tag());
     out
+}
+
+/// JSON für ein `<script>`-Element: Es darf kein „</script>“ entstehen, daher
+/// <, > und & als JSON-Escapes (Manifeste stammen auch von Dritt-Mods).
+fn script_json(value: &Value) -> String {
+    value
+        .to_string()
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
 }
 
 /// Wie `encodeURIComponent` in JavaScript – die URLs müssen exakt denen des Loaders gleichen.
@@ -98,15 +138,15 @@ mod tests {
 
     #[test]
     fn boot_json_cannot_close_the_script() {
-        let mut config = Map::new();
-        config.insert("x".into(), json!({ "evil": "</script><script>alert(1)</script>" }));
-        let html = head_tags(&[], config);
-        assert_eq!(
-            html.matches("</script>").count(),
-            2,
-            "nur Boot-Block und Loader schließen: {html}"
-        );
+        let evil = json!({ "description": "</script><script>alert(1)</script>" });
+        let escaped = script_json(&evil);
+        assert!(!escaped.contains('<'), "{escaped}");
+        assert_eq!(serde_json::from_str::<Value>(&escaped).unwrap(), evil);
+
+        let html = head_tags(&[]);
+        assert_eq!(html.matches("</script>").count(), 2, "Boot-Block und Loader: {html}");
         assert!(html.contains(r#"id="zimaforge-boot""#));
         assert!(html.contains("/_forge/runtime/store.js?v="));
+        assert!(!html.contains("config"), "keine Einstellungen in der Seite");
     }
 }

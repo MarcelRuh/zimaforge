@@ -51,20 +51,20 @@ Mods aus dem Katalog werden **nicht** automatisch installiert. Du wählst sie im
 1. In ZimaOS den **App Store** öffnen und oben rechts **„+“ → Benutzerdefinierte App installieren** wählen.
 2. Im Dialog oben rechts auf **Import** klicken und **Docker Compose** wählen.
 3. Die Compose-Datei angeben, auf einem von zwei Wegen:
-   - **Einfügen:** den Inhalt von [`docker-compose.yml`](docker-compose.yml) kopieren. Auf GitHub geht das über das Kopier-Symbol „Copy raw file“ oben rechts in der Dateiansicht. Dann in das Textfeld einfügen.
-   - **Hochladen:** `zimaforge-docker-compose.yml` aus dem [neuesten Release](https://github.com/MarcelRuh/zimaforge/releases/latest) herunterladen und auswählen.
+   - **Einfügen:** den YAML-Block aus den Notizen des [neuesten Releases](https://github.com/MarcelRuh/zimaforge/releases/latest) kopieren (Kopier-Symbol oben rechts am Block) und in das Textfeld einfügen.
+   - **Hochladen:** [`zimaforge-docker-compose.yml`](https://github.com/MarcelRuh/zimaforge/releases/latest/download/zimaforge-docker-compose.yml) aus dem neuesten Release herunterladen und auswählen.
+
+   Nimm die Compose-Datei aus dem Release, nicht aus dem `main`-Zweig: Dort kann schon eine Version stehen, deren Image noch nicht veröffentlicht ist.
 4. Mit **Absenden** bzw. **Importieren** bestätigen. Das Formular füllt sich von selbst. Prüfe kurz: Bildname `ghcr.io/marcelruh/zimaforge`, **Netzwerktyp `host`** (nicht *bridge*), Port **8077**.
 5. Unten rechts auf **Installieren** klicken.
 6. Die Kachel *ZimaForge* öffnen und wie gewohnt bei ZimaOS anmelden. Der Store öffnet sich automatisch. Später erreichst du ihn über das **Sechseck unten rechts** oder mit <kbd>Alt</kbd>+<kbd>⇧</kbd>+<kbd>F</kbd>.
-
-Der fertige YAML-Block zum Kopieren steht auch in den Notizen jedes [Releases](https://github.com/MarcelRuh/zimaforge/releases/latest).
 
 ### Mods direkt auf dem Standardport
 
 Damit die Mods unter der normalen Adresse `http://<ZIMAOS-IP>/` erscheinen, tauschen ZimaForge und ZimaOS die Ports:
 
 1. In ZimaOS unter **Einstellungen** den Dashboard-Port auf **8081** stellen.
-2. Statt `docker-compose.yml` die Datei [`docker-compose.standardport.yml`](docker-compose.standardport.yml) importieren (`ZIMAFORGE_PORT: "80"`, `ZIMAFORGE_UPSTREAM: http://127.0.0.1:8081`).
+2. Statt `zimaforge-docker-compose.yml` die Datei [`zimaforge-docker-compose-standardport.yml`](https://github.com/MarcelRuh/zimaforge/releases/latest/download/zimaforge-docker-compose-standardport.yml) aus dem neuesten Release importieren (`ZIMAFORGE_PORT: "80"`, `ZIMAFORGE_UPSTREAM: http://127.0.0.1:8081`). Der Hinweis zum Port 8081 erscheint auch vor der Installation in ZimaOS.
 3. `http://<ZIMAOS-IP>/` öffnen: Das ist jetzt dein Dashboard mit Mods.
 
 Läuft ZimaForge einmal nicht, ist das Dashboard weiter direkt unter `:8081` erreichbar.
@@ -73,7 +73,7 @@ Läuft ZimaForge einmal nicht, ist das Dashboard weiter direkt unter `:8081` err
 
 ```bash
 mkdir -p /DATA/AppData/zimaforge && cd /DATA/AppData/zimaforge
-curl -fsSLO https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/docker-compose.yml
+curl -fsSL -o docker-compose.yml https://github.com/MarcelRuh/zimaforge/releases/latest/download/zimaforge-docker-compose.yml
 docker compose up -d
 ```
 
@@ -105,11 +105,13 @@ Zum **Deinstallieren** die App in ZimaOS entfernen und optional `/DATA/AppData/z
 
 ## Sicherheit
 
-- **Lesende** Routen (Mod-Liste, Einstellungen, Systemwerte) sind ohne Anmeldung erreichbar, damit Mods beim Start laden können.
+- **Lesende** Routen für Mod-Liste und Systemwerte sind ohne Anmeldung erreichbar, damit Mods beim Start laden können. **Einstellungen** der Mods (z. B. der Wetter-Ort) gibt es nur mit gültiger ZimaOS-Sitzung; sie stehen auch nicht in der ausgelieferten Seite.
 - **Schreibende** Routen (installieren, entfernen, aktivieren, Einstellungen speichern) verlangen
   1. den Header `X-ZimaForge: 1`; fremde Seiten lösen damit einen CORS-Preflight aus, den ZimaForge nie erlaubt,
   2. einen zum `Host` passenden `Origin`, falls der Browser einen mitschickt,
-  3. einen **gültigen ZimaOS-Sitzungstoken**. ZimaForge prüft ihn bei `/v1/users/current` des Gateways und merkt sich das Ergebnis 60 Sekunden lang als SHA-256-Hash.
+  3. einen **gültigen ZimaOS-Sitzungstoken eines Administrators**. ZimaForge prüft ihn bei `/v1/users/current` des Gateways und merkt sich das Ergebnis 60 Sekunden lang als SHA-256-Hash. Meldet ZimaOS eine andere Rolle als `admin`, lehnt ZimaForge ab – Mods laufen im Browser jedes Benutzers.
+- Einstellungen lassen sich nur für ZimaForge selbst und installierte Mods speichern.
+- Downloads, Videos und Archive aus ZimaOS reicht ZimaForge unverändert durch; komprimiert wird nur Text.
 - Mod-IDs und Dateipfade werden streng geprüft (kein `..`, keine versteckten Dateien, keine Symlinks beim Kopieren).
 - Standardmäßig läuft die Verbindung über HTTP im LAN. Für fremde Netze gehört ZimaForge hinter HTTPS, zum Beispiel hinter [Proxora](https://github.com/MarcelRuh/proxora).
 - Mods selbst sind **nicht** abgeschottet. Sie laufen im Dashboard-Ursprung mit deiner Sitzung.
@@ -148,12 +150,17 @@ Danach `http://127.0.0.1:8077` öffnen und unten links „Anmelden (Mock)“ kli
 ```text
 src/
 ├── main.rs      Start, Signale, Healthcheck-Modus
+├── lib.rs       Router, Module und Versionsnummer
+├── config.rs    Konfiguration aus Umgebungsvariablen
+├── state.rs     gemeinsamer Zustand aller Handler
 ├── proxy.rs     Reverse-Proxy, HTML-Injection, WebSocket-Tunnel
-├── api.rs       /_forge/api, /_forge/runtime, /_forge/mods, /mod (Kompatibilität)
+├── inject.rs    Loader-Tag einfügen
+├── boot.rs      Startdaten und Preloads in der Dashboard-Seite
+├── api.rs       /_forge/api, /_forge/runtime, /_forge/mods, /_forge/catalog, /mod (Kompatibilität)
 ├── auth.rs      Prüfung der ZimaOS-Sitzung und CSRF-Schutz
 ├── mods.rs      Manifeste, Katalog, atomare Installation, Konfiguration
 ├── metrics.rs   /proc- und /sys-Auswertung
-└── inject.rs    Loader-Tag einfügen
+└── sysinfo.rs   Prozesse, Apps und Temperaturen für Forge Pulse
 runtime/         Loader und Store (ES-Module, Web Components), ins Binary eingebettet
 mods/            mitgelieferter Katalog
 ```

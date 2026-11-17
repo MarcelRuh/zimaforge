@@ -1,6 +1,6 @@
 {
   "name": "Forge Schnee",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Leise fallender Schnee mit leichtem Neon-Schimmer über dem Dashboard. Klick-durchlässig, pausiert im Hintergrund-Tab und läuft bei „Bewegung reduzieren“ ruhiger.",
   "category": "Hintergrund",
   "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],

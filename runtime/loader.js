@@ -36,15 +36,19 @@ class ForgeError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body, write = false } = {}) {
+/**
+ * Anfrage an die ZimaForge-API. `write`: schreibend (Sitzung Pflicht, CSRF-Header);
+ * `auth`: lesend mit Sitzung, falls vorhanden (z. B. Einstellungen).
+ */
+async function request(path, { method = "GET", body, write = false, auth = false } = {}) {
   const headers = { Accept: "application/json" };
   if (body !== undefined) headers["Content-Type"] = "application/json";
+  const token = write || auth ? sessionToken() : "";
   if (write) {
-    const token = sessionToken();
     if (!token) throw new ForgeError("Bitte zuerst bei ZimaOS anmelden.", 401);
     headers["X-ZimaForge"] = "1";
-    headers.Authorization = token;
   }
+  if (token) headers.Authorization = token;
   const response = await fetch(`${API}${path}`, {
     method,
     headers,
@@ -57,9 +61,15 @@ async function request(path, { method = "GET", body, write = false } = {}) {
   if (!response.ok) {
     const message =
       response.status === 401 ? "ZimaOS-Anmeldung abgelaufen – bitte neu anmelden." :
-      response.status === 403 ? "Anfrage abgelehnt (Sicherheitsprüfung)." :
+      response.status === 403 ? (data?.error === "nur für ZimaOS-Administratoren"
+        ? "Nur ZimaOS-Administratoren dürfen Mods verwalten."
+        : "Anfrage abgelehnt (Sicherheitsprüfung).") :
       data?.error || `Fehler ${response.status}`;
     throw new ForgeError(message, response.status);
+  }
+  // z. B. eine HTML-Fehlerseite eines vorgeschalteten Proxys statt JSON
+  if (data === null || typeof data !== "object") {
+    throw new ForgeError("Unerwartete Antwort von ZimaForge.", response.status);
   }
   return data;
 }
@@ -73,16 +83,38 @@ function emit(event, detail) {
 
 const id = (modId) => encodeURIComponent(modId);
 
-// Vom Server mit der Seite gelieferte Startdaten (aktive Mods, Einstellungen):
-// spart beim Laden die Wartezeit auf /mods und /config/<id>.
+// Vom Server mit der Seite gelieferte Startdaten (aktive Mods): spart beim Laden
+// die Wartezeit auf /mods.
 const bootData = (() => {
   try {
     const data = JSON.parse(document.getElementById("zimaforge-boot")?.textContent || "null");
     return data && data.version === VERSION ? data : null;
   } catch { return null; }
 })();
-// Jede Einstellung nur einmal aus den Startdaten – danach (oder nach setConfig) frisch vom Server.
-const bootConfig = new Map(Object.entries(bootData?.config ?? {}));
+
+// Alle Einstellungen mit einer angemeldeten Anfrage, sobald der Loader startet –
+// parallel zum Laden der Mod-Dateien. Jede wird einmal daraus bedient, danach
+// (oder nach setConfig) frisch vom Server.
+let bootConfig = null;
+function prefetchConfig() {
+  if (!sessionToken()) return Promise.resolve(new Map());
+  bootConfig ??= request("/config", { auth: true })
+    .then((r) => new Map(Object.entries(r.config ?? {})))
+    .catch(() => new Map());
+  return bootConfig;
+}
+
+async function fetchConfig(modId) {
+  // Ein kurzer Netzaussetzer soll nicht als „keine Einstellungen“ gelten – sonst
+  // überschreibt der Mod beim nächsten Speichern die gespeicherten Werte.
+  for (let attempt = 0; ; attempt++) {
+    try { return (await request(`/config/${id(modId)}`, { auth: true })).config; }
+    catch (err) {
+      if (attempt >= 1 || err.status === 401 || err.status === 404) throw err;
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+}
 
 const ZimaForge = Object.freeze({
   version: VERSION,
@@ -92,21 +124,22 @@ const ZimaForge = Object.freeze({
   runtimeUrl: (rel) => `${BASE}/runtime/${rel}?v=${encodeURIComponent(VERSION)}`,
   sessionToken,
   async getConfig(modId, fallback = null) {
-    if (bootConfig.has(modId)) {
-      const value = bootConfig.get(modId);
-      bootConfig.delete(modId);
+    const prefetched = await prefetchConfig();
+    if (prefetched.has(modId)) {
+      const value = prefetched.get(modId);
+      prefetched.delete(modId);
       return value ?? fallback;
     }
-    try { return (await request(`/config/${id(modId)}`)).config ?? fallback; }
+    try { return (await fetchConfig(modId)) ?? fallback; }
     catch { return fallback; }
   },
   async setConfig(modId, config) {
-    bootConfig.delete(modId);
+    (await prefetchConfig()).delete(modId);
     const result = await request(`/config/${id(modId)}`, { method: "PUT", body: config, write: true });
     emit("config", { id: modId, config: result.config });
     return result.config;
   },
-  metrics: () => request("/metrics"),
+  metrics: () => request("/metrics", { auth: true }),
   session: () => request("/session", { write: true }),
   store: Object.freeze({
     list: async () => (await request("/store")).mods ?? [],
@@ -156,20 +189,29 @@ function createEffects() {
   const layers = new Set();
   let timer = null;
 
+  // Nur Fenster, die einen großen Teil des Bildschirms bedecken – kleine, dauerhaft
+  // sichtbare Panels mit role="dialog" sollen die Effekte nicht abschalten.
   const dialogOpen = () => {
+    const screen = innerWidth * innerHeight;
     for (const el of document.querySelectorAll(DIALOGS)) {
       if (el.closest("zimaforge-store, zimaforge-launcher")) continue;
       const r = el.getBoundingClientRect();
-      if (r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== "hidden") return true;
+      if (r.width * r.height < screen * 0.2) continue;
+      if (getComputedStyle(el).visibility !== "hidden") return true;
     }
     return false;
   };
 
   const check = () => {
+    if (document.hidden) return; // Hintergrund-Tab: nichts prüfen
     const hide = dialogOpen();
     for (const l of layers) {
-      if (!l.isConnected) layers.delete(l);
-      else l.style.visibility = hide ? "hidden" : "";
+      if (!l.isConnected) { layers.delete(l); continue; }
+      const was = l.style.visibility === "hidden";
+      if (was === hide) continue;
+      l.style.visibility = hide ? "hidden" : "";
+      // Mods können darauf ihre Animation anhalten (Ereignis „zimaforge:visibility“).
+      l.dispatchEvent(new CustomEvent("zimaforge:visibility", { detail: { hidden: hide } }));
     }
     if (!layers.size) { clearInterval(timer); timer = null; }
   };
@@ -177,7 +219,13 @@ function createEffects() {
   return Object.freeze({
     /** Nutzer hat „Bewegung reduzieren“ eingestellt – Effekte dann ruhiger laufen lassen. */
     reducedMotion: () => matchMedia("(prefers-reduced-motion: reduce)").matches,
-    /** Macht `el` (Canvas oder Container) zur klick-durchlässigen Effekt-Ebene über dem Dashboard. */
+    /**
+     * Macht `el` (Canvas oder Container) zur klick-durchlässigen Effekt-Ebene über dem
+     * Dashboard. Solange ein ZimaOS-Fenster offen ist, ist sie ausgeblendet; dann und
+     * beim Wiedereinblenden feuert `el` das Ereignis `zimaforge:visibility`
+     * (`event.detail.hidden`). `F.effects.hidden(el)` fragt den Zustand ab.
+     */
+    hidden: (el) => el.style.visibility === "hidden" || document.hidden,
     layer(el) {
       Object.assign(el.style, {
         position: "fixed", inset: "0", width: "100vw", height: "100vh",
@@ -298,14 +346,19 @@ function createDashboard() {
     return null;
   };
 
-  /** Steht `el` schon am gewünschten Platz neben seinem Anker? */
+  /**
+   * Steht `el` schon am gewünschten Platz neben seinem Anker? Andere eingehängte
+   * Widgets dazwischen zählen nicht – sonst würden zwei Widgets mit demselben Anker
+   * einander endlos verdrängen.
+   */
   function inPlace(el, opts, col) {
     if (el.parentElement !== col) return false;
     if (!opts.pin) return true; // nicht angeheftet: Nutzer darf umsortieren
+    const skip = (n, dir) => { while (n && registrations.has(n)) n = n[dir]; return n; };
     const before = opts.before ? firstNative(opts.before, col) : null;
-    if (before) return el.nextElementSibling === before;
+    if (before) return skip(el.nextElementSibling, "nextElementSibling") === before;
     const after = opts.after ? firstNative(opts.after, col) : null;
-    if (after) return el.previousElementSibling === after;
+    if (after) return skip(el.previousElementSibling, "previousElementSibling") === after;
     return true;
   }
 
@@ -356,13 +409,14 @@ function createDashboard() {
   const refresh = () => {
     if (pending) return;
     pending = true;
+    // Ohne Spalte (Anmeldeseite, andere Ansicht) seltener nachsehen.
     setTimeout(() => {
       pending = false;
       const before = column;
       for (const [el, opts] of registrations) place(el, opts);
       const col = widgetColumn();
-      emit("dashboard", { column: col, changed: col !== before });
-    }, 250);
+      if (col || before) emit("dashboard", { column: col, changed: col !== before });
+    }, column ? 250 : 1000);
   };
 
   let observer = null;
@@ -371,7 +425,11 @@ function createDashboard() {
     observer = new MutationObserver((records) => {
       // Nur reagieren, wenn es die Spalte betrifft – Uhr-Ticks, Messwerte und
       // Änderungen in eingehängten Widgets lösen nichts aus.
-      if (!columnValid()) return refresh();
+      if (!columnValid()) {
+        // Änderungen nur innerhalb von Mod-Elementen (Messwerte, Effekte) ignorieren.
+        if (records.every((r) => isOwn(r.target))) return;
+        return refresh();
+      }
       for (const [el, opts] of registrations) if (!inPlace(el, opts, column)) return refresh();
       for (const r of records) if (r.target === column) return refresh();
     });
@@ -388,10 +446,8 @@ function createDashboard() {
      * von Namen: "clock", "system", "storage", "network"; der erste vorhandene zählt),
      * sonst oben bzw. mit `position: "end"` unten. Mit `pin: true` rückt das Widget
      * bei jedem Umbau wieder an diesen Platz; sonst darf der Nutzer es verschieben.
-     * Bleibt dort, wenn ZimaOS neu rendert.| "storage" | "network",
-     * sonst oben bzw. mit `position: "end"` unten) und hält es dort, wenn ZimaOS neu
-     * rendert. Ohne Spalte landet es schwebend im Body (Klasse `zf-widget-floating`).
-     * Gibt eine Funktion zum Entfernen zurück.
+     * Ohne Spalte landet es schwebend im Body (Klasse `zf-widget-floating`), auf der
+     * Anmeldeseite unsichtbar. Gibt eine Funktion zum Entfernen zurück.
      */
     mountWidget(el, opts = {}) {
       own.add(el);
@@ -409,7 +465,10 @@ function createDashboard() {
         el.remove();
       };
     },
-    /** Meldet ZimaForge, dass `el` zu einem Mod gehört (wird bei der Titelsuche übersprungen). */
+    /**
+     * Meldet ZimaForge, dass `el` zu einem Mod gehört: Es wird bei der Suche nach
+     * nativen Widgets übersprungen, und Änderungen darin lösen keine Neusuche aus.
+     */
     ignore(el) { own.add(el); },
     /**
      * Ruft `fn({ column, changed })` auf, wenn sich die Widget-Spalte ändert (neue oder
@@ -481,6 +540,7 @@ async function boot() {
   window.ZimaForge = ZimaForge;
   if (!window.ZimaMOD) window.ZimaMOD = ZimaMODShim;
   addFontFace();
+  void prefetchConfig(); // Einstellungen laden, während die Mod-Dateien laden
 
   // Store-Oberfläche (Launcher, Tastenkürzel, Dialog).
   import(`./store.js?v=${encodeURIComponent(VERSION)}`).catch((err) =>

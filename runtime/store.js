@@ -56,36 +56,66 @@ const withAvailability = (latest, url) => ({
   available: VERSION !== "dev" && cmpVersion(latest, VERSION) > 0,
 });
 
-async function checkForUpdate(force = false) {
-  try {
-    const cached = JSON.parse(localStorage.getItem(UPDATE_KEY) || "null");
+// Nach einem Fehlschlag (offline, GitHub-Limit 60/h) 15 Minuten nicht erneut fragen.
+const UPDATE_RETRY = 15 * 60_000;
+let updateInFlight = null;
+
+function checkForUpdate(force = false) {
+  if (!force && updateInFlight) return updateInFlight;
+  updateInFlight = (async () => {
+    let cached = null;
+    try { cached = JSON.parse(localStorage.getItem(UPDATE_KEY) || "null"); } catch { /* kein Cache */ }
     // Cache gilt nur für dieselbe laufende Version – nach einem Update neu prüfen.
-    const fresh = cached?.checkedWith === VERSION && Date.now() - cached.at < UPDATE_TTL;
-    if (!force && fresh && cached.latest) return withAvailability(cached.latest, cached.url);
-  } catch { /* kein Cache */ }
-  const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
-    headers: { Accept: "application/vnd.github+json" },
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error(`GitHub ${res.status}`);
-  const release = await res.json();
-  const latest = String(release.tag_name || "").replace(/^v/, "");
-  try {
-    localStorage.setItem(UPDATE_KEY, JSON.stringify({ at: Date.now(), checkedWith: VERSION, latest, url: release.html_url }));
-  } catch { /* egal */ }
-  return withAvailability(latest, release.html_url);
+    const same = cached?.checkedWith === VERSION;
+    const age = Date.now() - (cached?.at ?? 0);
+    if (!force && same && cached.latest && age < UPDATE_TTL) return withAvailability(cached.latest, cached.url);
+    if (!force && same && cached.failedAt && Date.now() - cached.failedAt < UPDATE_RETRY) {
+      if (cached.latest) return withAvailability(cached.latest, cached.url);
+      throw new Error("GitHub zurzeit nicht erreichbar");
+    }
+    try {
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+        headers: { Accept: "application/vnd.github+json" },
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(`GitHub ${res.status}`);
+      const release = await res.json();
+      const latest = String(release.tag_name || "").replace(/^v/, "");
+      try {
+        localStorage.setItem(UPDATE_KEY, JSON.stringify({ at: Date.now(), checkedWith: VERSION, latest, url: release.html_url }));
+      } catch { /* egal */ }
+      return withAvailability(latest, release.html_url);
+    } catch (err) {
+      try {
+        localStorage.setItem(UPDATE_KEY, JSON.stringify({ ...(same ? cached : {}), checkedWith: VERSION, failedAt: Date.now() }));
+      } catch { /* egal */ }
+      throw err;
+    }
+  })().finally(() => { updateInFlight = null; });
+  return updateInFlight;
 }
 
 let settingsCache = null;
 let connection = null; // Antwort von /_forge/api/health (Ziel-Adresse von ZimaOS)
-async function loadSettings() {
-  settingsCache = { ...DEFAULT_SETTINGS, ...((await F.getConfig(CORE_ID, {})) || {}) };
+// Einstellungen werden einmal beim Start geladen; alle anderen warten darauf.
+let settingsReady = null;
+function loadSettings() {
+  settingsReady ??= F.getConfig(CORE_ID, {}).then((c) => {
+    settingsCache = { ...DEFAULT_SETTINGS, ...(c || {}) };
+    return settingsCache;
+  });
+  return settingsReady;
+}
+
+/** Verbindungsdaten erst, wenn die Einstellungen sie anzeigen. */
+async function loadConnection() {
   try {
-    connection = await (await fetch("/_forge/api/health", { cache: "no-store" })).json();
+    const res = await fetch("/_forge/api/health", { cache: "no-store" });
+    connection = res.ok ? await res.json() : null;
   } catch {
     connection = null;
   }
-  return settingsCache;
+  return connection;
 }
 
 /* ───────────────────────── Launcher ───────────────────────── */
@@ -124,6 +154,9 @@ class ForgeStore extends HTMLElement {
   #update = null;
   #loading = false;
   #error = "";
+  #seq = 0; // Zähler für Store-Abrufe: Nur die neueste Antwort zählt.
+  #prevOverflow = null; // Wert vor dem Öffnen; null = nicht gesperrt
+  #focusKey = null; // zuletzt fokussiertes Bedienelement im Inhalt (über Neuaufbauten hinweg)
 
   connectedCallback() {
     if (this.#root) return;
@@ -164,15 +197,16 @@ class ForgeStore extends HTMLElement {
     this.dialog = $("dialog");
     $(".close").addEventListener("click", () => this.close());
     this.dialog.addEventListener("click", (e) => { if (e.target === this.dialog) this.close(); });
-    this.dialog.addEventListener("close", () => document.documentElement.style.removeProperty("overflow"));
+    // Esc schließt den Dialog ohne close() – dann über das Ereignis entsperren.
+    this.dialog.addEventListener("close", () => this.#unlockScroll());
     $(".nav").addEventListener("click", (e) => {
       const btn = e.target.closest("button[data-view]");
       if (btn) this.#show(btn.dataset.view);
     });
     $(".search input").addEventListener("input", (e) => {
       this.#query = e.target.value.trim().toLowerCase();
-      if (this.#view === "settings") this.#view = "discover";
-      this.#render();
+      if (this.#view === "settings") this.#show("discover");
+      else this.#render();
     });
     $(".reload button").addEventListener("click", () => location.reload());
     $(".content").addEventListener("click", (e) => this.#onAction(e));
@@ -185,35 +219,55 @@ class ForgeStore extends HTMLElement {
   async open(view) {
     if (!this.dialog.open) {
       this.dialog.showModal();
+      if (this.#prevOverflow === null) this.#prevOverflow = document.documentElement.style.overflow;
       document.documentElement.style.overflow = "hidden";
     }
     this.#show(view || this.#view);
+    const settings = loadSettings();
     await this.refresh();
-    if (settingsCache?.updateCheck !== false) void this.#checkUpdate(false);
+    // Erst entscheiden, wenn die Einstellungen da sind – sonst fragt der Store GitHub,
+    // obwohl die Update-Prüfung abgeschaltet ist.
+    if ((await settings).updateCheck !== false) void this.#checkUpdate(false);
   }
 
   close() {
     this.dialog.close();
+    this.#unlockScroll();
+  }
+
+  /** Scrollsperre lösen und den vorherigen Wert wiederherstellen (ZimaOS oder ein Mod könnte ihn gesetzt haben). */
+  #unlockScroll() {
+    if (this.#prevOverflow === null) return;
+    document.documentElement.style.overflow = this.#prevOverflow;
+    this.#prevOverflow = null;
   }
 
   async refresh() {
+    const seq = ++this.#seq;
     this.#loading = true;
     this.#error = "";
     this.#render();
     try {
-      this.#mods = await F.store.list();
+      const mods = await F.store.list();
+      if (seq === this.#seq) this.#mods = mods; // ältere Antworten verwerfen
     } catch (err) {
-      this.#error = err.message;
+      if (seq === this.#seq) this.#error = err.message;
     } finally {
-      this.#loading = false;
-      this.#render();
+      if (seq === this.#seq) {
+        this.#loading = false;
+        this.#render();
+      }
     }
   }
 
   #show(view) {
     this.#view = ["discover", "installed", "updates", "settings"].includes(view) ? view : "discover";
     for (const b of this.#root.querySelectorAll(".nav button")) {
-      b.toggleAttribute("aria-current", b.dataset.view === this.#view);
+      if (b.dataset.view === this.#view) b.setAttribute("aria-current", "page");
+      else b.removeAttribute("aria-current");
+    }
+    if (this.#view === "settings" && !connection) {
+      void loadConnection().then(() => { if (this.#view === "settings") this.#render(); });
     }
     this.#render();
   }
@@ -261,8 +315,33 @@ class ForgeStore extends HTMLElement {
     return list;
   }
 
+  /**
+   * Baut den Inhalt neu auf und setzt den Fokus danach wieder auf dasselbe Bedienelement
+   * (Schalter, Knopf, Einstellung) – sonst verlieren Tastatur- und Screenreader-Nutzer
+   * nach jedem Klick ihren Platz.
+   */
   #render() {
     if (!this.#root) return;
+    const content = this.#root.querySelector(".content");
+    const active = this.#root.activeElement;
+    if (active && content.contains(active) && active !== content) {
+      this.#focusKey = [active.closest(".card")?.dataset.id ?? "", active.dataset.act ?? "", active.dataset.setting ?? ""];
+    } else if (active && active !== content) {
+      this.#focusKey = null; // Fokus liegt woanders (Suche, Navigation) – nicht zurückholen
+    }
+    // Ohne aktives Element ging der Fokus beim letzten Aufbau verloren (z. B. Schalter
+    // während der Aktion gesperrt) – dann den gemerkten Platz wiederherstellen.
+    this.#renderContent();
+    if (!this.#focusKey) return;
+    const [id, act, setting] = this.#focusKey;
+    const sel = setting ? `[data-setting="${CSS.escape(setting)}"]`
+      : act ? `${id ? `.card[data-id="${CSS.escape(id)}"] ` : ""}[data-act="${CSS.escape(act)}"]` : null;
+    const target = sel && content.querySelector(sel);
+    if (target && !target.disabled) target.focus({ preventScroll: true });
+    else content.focus({ preventScroll: true });
+  }
+
+  #renderContent() {
     const titles = { discover: "Entdecken", installed: "Installiert", updates: "Updates", settings: "Einstellungen" };
     this.#root.querySelector("#zf-title").textContent = titles[this.#view];
     this.#root.querySelector("#zf-kicker").textContent = this.#view === "settings" ? "ZimaForge" : "Mod Store";
@@ -442,7 +521,9 @@ class ForgeStore extends HTMLElement {
     try {
       await fn();
       this.#needsReload = true;
-      this.#mods = await F.store.list();
+      const seq = ++this.#seq;
+      const mods = await F.store.list();
+      if (seq === this.#seq) this.#mods = mods;
     } catch (err) {
       this.#toast(err.message, "err");
     } finally {
@@ -465,7 +546,8 @@ if (!customElements.get("zimaforge-store")) {
   launcher.position = DEFAULT_SETTINGS.launcher;
   document.body.append(launcher, document.createElement("zimaforge-store"));
 
-  loadSettings().then((s) => {
+  // Launcher-Position sofort anwenden, sobald die Einstellungen da sind.
+  void loadSettings().then((s) => {
     applySettings(s);
     if (s.updateCheck !== false) {
       checkForUpdate(false).then((u) => { launcher.updateAvailable = Boolean(u?.available); }).catch(() => {});
@@ -510,8 +592,9 @@ function interceptSelfLinks() {
     if (url != null && isSelfUrl(url) && target !== "_self") {
       const view = new URL(String(url), location.href).searchParams.get("forge") || undefined;
       void F.openStore(view);
-      // Aufrufer erwarten meist ein Fensterobjekt (z. B. für .focus()).
-      return window;
+      // Aufrufer erwarten meist ein Fensterobjekt (z. B. für .focus()). Nicht `window`
+      // zurückgeben – ein `w.location.href = …` würde sonst das Dashboard selbst umleiten.
+      return { closed: false, focus() {}, blur() {}, close() {}, postMessage() {}, location: { href: "" } };
     }
     return nativeOpen.call(this, url, target, features);
   };

@@ -1,7 +1,22 @@
-target
+# Der Build braucht nur, was das Dockerfile kopiert:
+# Cargo.toml, Cargo.lock, rustfmt.toml, src/, runtime/ und mods/.
 .git
 .github
+.gitattributes
+.gitignore
+.dockerignore
+Dockerfile
+docker-compose*.yml
+target
+dev
+dev-data
+tests
+examples
 docs
 assets
 *.md
-!mods/**/*.md
+LICENSE
+NOTICE
+**/*.tmp
+**/.DS_Store
+**/Thumbs.db

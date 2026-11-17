@@ -17,6 +17,8 @@ use serde::{Deserialize, Serialize};
 pub const MANIFEST: &str = "forge.json";
 pub const ZIMAMOD_MANIFEST: &str = "zimamod.json";
 pub const MAX_CONFIG_BYTES: usize = 64 * 1024;
+/// Einstellungen von ZimaForge selbst (Launcher, Update-Prüfung) – kein Mod.
+pub const CORE_CONFIG_ID: &str = "zimaforge";
 
 #[derive(Debug, thiserror::Error)]
 pub enum ModError {
@@ -316,10 +318,13 @@ impl ModStore {
     }
 
     fn load_state(&self) -> State {
-        fs::read(self.state_path())
-            .ok()
-            .and_then(|raw| serde_json::from_slice(&raw).ok())
-            .unwrap_or_default()
+        let Ok(raw) = fs::read(self.state_path()) else {
+            return State::default();
+        };
+        serde_json::from_slice(&raw).unwrap_or_else(|err| {
+            tracing::warn!(error = %err, "state.json unlesbar – alle installierten Mods gelten als aktiv");
+            State::default()
+        })
     }
 
     fn save_state(&self, state: &State) -> io::Result<()> {
@@ -461,6 +466,11 @@ impl ModStore {
         if raw.len() > MAX_CONFIG_BYTES {
             return Err(ModError::InvalidConfig("zu groß".into()));
         }
+        // Nur für ZimaForge selbst und installierte Mods – sonst ließen sich beliebig
+        // viele Konfigurationsdateien anlegen.
+        if id != CORE_CONFIG_ID && read_mod(&self.mods_dir().join(id))?.is_none() {
+            return Err(ModError::NotFound);
+        }
         let value: serde_json::Value =
             serde_json::from_slice(raw).map_err(|e| ModError::InvalidConfig(e.to_string()))?;
         self.ensure_layout()?;
@@ -490,10 +500,21 @@ impl ModStore {
     }
 }
 
+/// Schreibt über eine temporäre Datei mit `fsync` – nach einem Stromausfall steht
+/// entweder der alte oder der neue Inhalt da, nie eine leere Datei.
 fn write_atomic(path: &Path, data: &[u8]) -> io::Result<()> {
+    use std::io::Write;
     let tmp = path.with_extension("tmp");
-    fs::write(&tmp, data)?;
-    fs::rename(&tmp, path)
+    let mut file = fs::File::create(&tmp)?;
+    file.write_all(data)?;
+    file.sync_all()?;
+    drop(file);
+    fs::rename(&tmp, path)?;
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        let _ = fs::File::open(dir).and_then(|d| d.sync_all());
+    }
+    Ok(())
 }
 
 fn copy_dir(from: &Path, to: &Path) -> io::Result<()> {
@@ -626,6 +647,12 @@ mod tests {
     #[test]
     fn config_roundtrip_and_limits() {
         let (_tmp, store) = setup();
+        assert!(
+            matches!(store.write_config("neon", b"{}"), Err(ModError::NotFound)),
+            "nur installierte Mods"
+        );
+        store.write_config(CORE_CONFIG_ID, br#"{"launcher":"hidden"}"#).unwrap();
+        store.install("neon").unwrap();
         assert_eq!(store.read_config("neon").unwrap(), serde_json::Value::Null);
         store.write_config("neon", br#"{"a":1}"#).unwrap();
         assert_eq!(store.read_config("neon").unwrap()["a"], 1);

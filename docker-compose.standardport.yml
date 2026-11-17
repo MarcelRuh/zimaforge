@@ -6,11 +6,28 @@ name: zimaforge
 
 services:
   zimaforge:
-    image: ghcr.io/marcelruh/zimaforge:0.4.0
+    image: ghcr.io/marcelruh/zimaforge:0.5.0
     container_name: zimaforge
     # Host-Netzwerk: ZimaForge belegt Port 80 und erreicht ZimaOS auf 127.0.0.1:8081.
     network_mode: host
     restart: unless-stopped
+    # Gehärtet: keine Rechteausweitung, und Capabilities, die ZimaForge nie braucht, sind weg.
+    # Bewusst behalten: Dateirechte (DAC_OVERRIDE, CHOWN, FOWNER) – sonst könnte ZimaForge
+    # einen /DATA-Ordner, der nicht root gehört, nicht mehr beschreiben – und NET_BIND_SERVICE
+    # für Ports unter 1024 (Standardport-Variante).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - NET_RAW
+      - MKNOD
+      - AUDIT_WRITE
+      - SYS_CHROOT
+      - SETFCAP
+      - SETPCAP
+      - SETUID
+      - SETGID
+      - FSETID
+      - KILL
     environment:
       ZIMAFORGE_PORT: "80"
       ZIMAFORGE_UPSTREAM: http://127.0.0.1:8081
@@ -62,6 +79,20 @@ x-casaos:
     de_de: >-
       ZimaForge sitzt vor dem ZimaOS-Dashboard und lädt JavaScript- und CSS-Mods.
       Ein einzelnes Rust-Binary, eingebauter Mod-Store, ZimaMOD-kompatibel, abgesichert über die ZimaOS-Anmeldung.
-  version: "0.4.0"
+  tips:
+    before_install:
+      en_us: >-
+        Before installing, move the ZimaOS dashboard to port 8081: in ZimaOS open Settings,
+        set the dashboard port to 8081 and then open http://<ZIMAOS-IP>:8081.
+        Otherwise port 80 is taken and ZimaForge will not start.
+        Afterwards http://<ZIMAOS-IP>/ is your dashboard with mods;
+        if ZimaForge is not running, ZimaOS stays reachable at http://<ZIMAOS-IP>:8081.
+      de_de: >-
+        Vor der Installation das ZimaOS-Dashboard auf Port 8081 legen: in ZimaOS unter Einstellungen
+        den Dashboard-Port auf 8081 stellen und danach http://<ZIMAOS-IP>:8081 öffnen.
+        Sonst ist Port 80 belegt und ZimaForge startet nicht.
+        Danach ist http://<ZIMAOS-IP>/ dein Dashboard mit Mods;
+        läuft ZimaForge nicht, bleibt ZimaOS unter http://<ZIMAOS-IP>:8081 erreichbar.
+  version: "0.5.0"
   repo: https://github.com/MarcelRuh/zimaforge
   support: https://github.com/MarcelRuh/zimaforge/issues

@@ -6,6 +6,7 @@
   "authors": [{ "name": "Dein Name", "url": "https://github.com/dein-name" }],
   "origin": { "type": "native", "source": "https://github.com/dein-name/mein-mod" },
   "tags": ["beispiel"],
+  "icon": "icon.svg",
   "scripts": ["mod.js"],
   "styles": ["mod.css"]
 }

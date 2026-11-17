@@ -63,10 +63,37 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
       - name: Smoke-Test
         run: |
-          set -e
+          set -eu
           docker run --rm zimaforge:ci --version
-          docker run -d --name zf -p 8077:8077 zimaforge:ci
-          for i in $(seq 1 20); do curl -fsS http://127.0.0.1:8077/_forge/api/health && break; sleep 1; done
-          curl -fsS http://127.0.0.1:8077/_forge/api/store | grep -q forge-pulse
-          curl -fsS http://127.0.0.1:8077/_forge/runtime/loader.js | grep -q ZimaForge
-          docker rm -f zf
+          # Wie in den Compose-Dateien: ohne Capabilities, ohne Rechteausweitung.
+          docker run -d --name zf -p 8077:8077 \
+            --cap-drop NET_RAW --cap-drop MKNOD --cap-drop AUDIT_WRITE --cap-drop SYS_CHROOT --cap-drop SETFCAP --cap-drop SETPCAP --cap-drop SETUID --cap-drop SETGID --cap-drop FSETID --cap-drop KILL --security-opt no-new-privileges zimaforge:ci
+          ok=
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8077/_forge/api/health && ok=1 && break
+            sleep 1
+          done
+          test -n "$ok" || { echo "::error::/_forge/api/health antwortet nicht"; exit 1; }
+          echo
+          store="$(curl -fsS http://127.0.0.1:8077/_forge/api/store)"
+          grep -q forge-pulse <<<"$store" || { echo "::error::Katalog ohne forge-pulse"; exit 1; }
+          loader="$(curl -fsS http://127.0.0.1:8077/_forge/runtime/loader.js)"
+          grep -q ZimaForge <<<"$loader" || { echo "::error::loader.js fehlt"; exit 1; }
+          # Docker-HEALTHCHECK (/zimaforge healthcheck) muss "healthy" melden.
+          health=
+          for i in $(seq 1 40); do
+            health="$(docker inspect --format '{{.State.Health.Status}}' zf)"
+            [ "$health" = healthy ] && break
+            [ "$health" = unhealthy ] && break
+            sleep 1
+          done
+          echo "Docker-Health: $health"
+          test "$health" = healthy || { echo "::error::Container ist nicht healthy ($health)"; exit 1; }
+      - name: Container-Logs bei Fehler
+        if: failure()
+        run: |
+          docker logs zf || true
+          docker inspect --format '{{json .State}}' zf || true
+      - name: Container entfernen
+        if: always()
+        run: docker rm -f zf || true

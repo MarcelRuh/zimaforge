@@ -37,14 +37,22 @@
   F.dashboard.mountWidget(card, { before: "clock", pin: true });
 
   let config = null;
-  let timer = null;
+  let editing = false; // Ortssuche offen – nicht durch Aktualisierungen überschreiben
+  let lastFetch = 0;
+  let inFlight = null;
+
+  // Gespeicherte Einstellungen nur verwenden, wenn sie plausibel sind (sie landen in der URL).
+  const valid = (c) => c
+    && Number.isFinite(c.latitude) && Math.abs(c.latitude) <= 90
+    && Number.isFinite(c.longitude) && Math.abs(c.longitude) <= 180
+    && (c.timezone == null || /^[A-Za-z0-9_+-/]{1,64}$/.test(String(c.timezone)));
 
   async function loadConfig() {
     let c = await F.getConfig(ID, null);
     if (!c) {
       try { c = JSON.parse(localStorage.getItem(LOCAL_KEY) || "null"); } catch { c = null; }
     }
-    return c && typeof c.latitude === "number" ? c : null;
+    return valid(c) ? c : null;
   }
 
   async function saveConfig(c) {
@@ -54,6 +62,7 @@
   }
 
   function renderSetup(message = "") {
+    editing = true;
     body.innerHTML = `
       <div class="zf-weather-head"><span class="zf-weather-title">Wetter</span></div>
       <form class="zf-weather-setup">
@@ -68,7 +77,7 @@
       </form>`;
     const form = card.querySelector("form");
     const list = card.querySelector(".zf-weather-results");
-    card.querySelector(".zf-weather-cancel")?.addEventListener("click", () => void refresh());
+    card.querySelector(".zf-weather-cancel")?.addEventListener("click", () => { editing = false; void refresh(true); });
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const q = card.querySelector("input").value.trim();
@@ -82,8 +91,11 @@
           : '<li class="zf-weather-msg">Kein Ort gefunden.</li>';
         list.querySelectorAll("button").forEach((b) => b.addEventListener("click", async () => {
           const h = hits[Number(b.dataset.i)];
-          await saveConfig({ name: h.name, latitude: h.latitude, longitude: h.longitude, timezone: h.timezone || "auto" });
-          void refresh();
+          const next = { name: h.name, latitude: h.latitude, longitude: h.longitude, timezone: h.timezone || "auto" };
+          if (!valid(next)) return;
+          editing = false;
+          await saveConfig(next);
+          void refresh(true);
         }));
       } catch {
         list.innerHTML = '<li class="zf-weather-msg">Ortssuche nicht erreichbar.</li>';
@@ -120,9 +132,20 @@
     card.querySelector(".zf-weather-edit").addEventListener("click", () => renderSetup());
   }
 
-  async function refresh() {
+  // Nicht abfragen, solange die Karte unsichtbar ist (z. B. Anmeldeseite).
+  const shown = () => card.isConnected && card.style.display !== "none";
+
+  /** Lädt das Wetter. Läuft schon ein Abruf, wird dieser geteilt. */
+  function refresh(force = false) {
+    if (editing || (!force && !shown())) return Promise.resolve();
+    inFlight ??= load().finally(() => { inFlight = null; });
+    return inFlight;
+  }
+
+  async function load() {
     config = config ?? (await loadConfig());
     if (!config) return renderSetup();
+    lastFetch = Date.now();
     try {
       const url = "https://api.open-meteo.com/v1/forecast"
         + `?latitude=${config.latitude}&longitude=${config.longitude}`
@@ -139,8 +162,12 @@
     }
   }
 
-  void refresh();
-  timer = setInterval(() => { if (!document.hidden) void refresh(); }, REFRESH_MS);
-  F.on("config", ({ id, config: c }) => { if (id === ID && c) { config = c; void refresh(); } });
-  void timer;
+  const stale = () => Date.now() - lastFetch >= REFRESH_MS;
+  void refresh(true);
+  setInterval(() => { if (!document.hidden) void refresh(); }, REFRESH_MS);
+  // Zurück im Tab oder Dashboard wieder sichtbar (nach der Anmeldung): nachladen, wenn alt.
+  document.addEventListener("visibilitychange", () => { if (!document.hidden && stale()) void refresh(); });
+  F.dashboard.watch(() => { if (stale()) void refresh(); });
+  // Ort in einem anderen Tab geändert: übernehmen.
+  F.on("config", ({ id, config: c }) => { if (id === ID && valid(c)) { config = c; void refresh(true); } });
 })();

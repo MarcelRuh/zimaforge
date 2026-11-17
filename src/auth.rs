@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 
 use axum::body::Body;
 use axum::http::{HeaderMap, Request, StatusCode, Uri, header};
+use http_body_util::BodyExt;
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
@@ -29,22 +30,31 @@ pub enum AuthError {
     ForeignOrigin,
     #[error("ZimaOS-Anmeldung erforderlich")]
     Unauthenticated,
+    #[error("nur für ZimaOS-Administratoren")]
+    NotAdmin,
 }
 
 impl AuthError {
     pub fn status(&self) -> StatusCode {
         match self {
-            Self::MissingCsrfHeader | Self::ForeignOrigin => StatusCode::FORBIDDEN,
+            Self::MissingCsrfHeader | Self::ForeignOrigin | Self::NotAdmin => StatusCode::FORBIDDEN,
             Self::Unauthenticated => StatusCode::UNAUTHORIZED,
         }
     }
+}
+
+/// Geprüfte Sitzung: wann geprüft und ob der Benutzer Administrator ist.
+#[derive(Clone, Copy)]
+struct Session {
+    at: Instant,
+    admin: bool,
 }
 
 #[derive(Clone)]
 pub struct SessionValidator {
     client: HttpClient,
     upstream: Uri,
-    cache: Arc<Mutex<HashMap<[u8; 32], Instant>>>,
+    cache: Arc<Mutex<HashMap<[u8; 32], Session>>>,
 }
 
 impl SessionValidator {
@@ -56,8 +66,23 @@ impl SessionValidator {
         }
     }
 
+    /// Schreibende Anfrage: CSRF-Schutz, gültige Sitzung und Administratorrechte.
+    /// Mods laufen im Browser jedes Benutzers – installieren darf sie nur ein Admin.
     pub async fn check(&self, headers: &HeaderMap) -> Result<(), AuthError> {
         check_request_origin(headers)?;
+        if self.session(headers).await?.admin {
+            Ok(())
+        } else {
+            Err(AuthError::NotAdmin)
+        }
+    }
+
+    /// Lesende Anfrage mit privaten Daten (Mod-Einstellungen): gültige Sitzung genügt.
+    pub async fn check_session(&self, headers: &HeaderMap) -> Result<(), AuthError> {
+        self.session(headers).await.map(|_| ())
+    }
+
+    async fn session(&self, headers: &HeaderMap) -> Result<Session, AuthError> {
         let token = headers
             .get(header::AUTHORIZATION)
             .filter(|v| !v.is_empty() && v.len() <= 8192)
@@ -66,8 +91,8 @@ impl SessionValidator {
         let key: [u8; 32] = Sha256::digest(token.as_bytes()).into();
         {
             let cache = self.cache.lock().await;
-            if cache.get(&key).is_some_and(|at| at.elapsed() < CACHE_TTL) {
-                return Ok(());
+            if let Some(s) = cache.get(&key).filter(|s| s.at.elapsed() < CACHE_TTL) {
+                return Ok(*s);
             }
         }
 
@@ -77,27 +102,58 @@ impl SessionValidator {
         let mut req = Request::get(uri).body(Body::empty()).expect("gültige Anfrage");
         req.headers_mut().insert(header::AUTHORIZATION, token.clone());
 
-        let ok = match tokio::time::timeout(Duration::from_secs(5), self.client.request(req)).await {
-            Ok(Ok(resp)) => resp.status().is_success(),
+        let request = async {
+            let resp = self.client.request(req).await?;
+            if !resp.status().is_success() {
+                return Ok::<_, hyper_util::client::legacy::Error>(None);
+            }
+            // Antwort höchstens 64 KiB; ohne lesbare Rolle gilt der Benutzer als Admin
+            // (ZimaOS kennt in der Regel nur Administratoren).
+            let body = http_body_util::Limited::new(resp.into_body(), 64 * 1024)
+                .collect()
+                .await
+                .map(|b| b.to_bytes())
+                .unwrap_or_default();
+            Ok(Some(is_admin(&body)))
+        };
+        let admin = match tokio::time::timeout(Duration::from_secs(5), request).await {
+            Ok(Ok(Some(admin))) => admin,
+            Ok(Ok(None)) => return Err(AuthError::Unauthenticated),
             Ok(Err(err)) => {
                 tracing::warn!(error = %err, "Sitzungsprüfung beim Gateway fehlgeschlagen");
-                false
+                return Err(AuthError::Unauthenticated);
             }
-            Err(_) => false,
+            Err(_) => {
+                tracing::warn!("Sitzungsprüfung beim Gateway: keine Antwort innerhalb von 5 s");
+                return Err(AuthError::Unauthenticated);
+            }
         };
-        if !ok {
-            return Err(AuthError::Unauthenticated);
-        }
 
+        let session = Session {
+            at: Instant::now(),
+            admin,
+        };
         let mut cache = self.cache.lock().await;
         if cache.len() >= CACHE_MAX {
-            cache.retain(|_, at| at.elapsed() < CACHE_TTL);
+            cache.retain(|_, s| s.at.elapsed() < CACHE_TTL);
             if cache.len() >= CACHE_MAX {
                 cache.clear();
             }
         }
-        cache.insert(key, Instant::now());
-        Ok(())
+        cache.insert(key, session);
+        Ok(session)
+    }
+}
+
+/// Rolle aus `/v1/users/current` (`{"data":{"role":"admin"}}`). Fehlt sie, gilt Admin.
+fn is_admin(body: &[u8]) -> bool {
+    let Ok(json) = serde_json::from_slice::<serde_json::Value>(body) else {
+        return true;
+    };
+    let user = json.get("data").unwrap_or(&json);
+    match user.get("role").and_then(|r| r.as_str()) {
+        Some(role) => role.eq_ignore_ascii_case("admin"),
+        None => true,
     }
 }
 
@@ -135,6 +191,15 @@ mod tests {
             h.insert(*k, HeaderValue::from_static(v));
         }
         h
+    }
+
+    #[test]
+    fn admin_role() {
+        assert!(is_admin(br#"{"data":{"username":"a","role":"admin"}}"#));
+        assert!(is_admin(br#"{"data":{"username":"a","role":"ADMIN"}}"#));
+        assert!(!is_admin(br#"{"data":{"username":"b","role":"user"}}"#));
+        assert!(is_admin(br#"{"data":{"username":"a"}}"#), "ohne Rolle: Admin");
+        assert!(is_admin(b"kein json"));
     }
 
     #[test]

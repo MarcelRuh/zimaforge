@@ -12,7 +12,12 @@
 
   const DEFAULT = "✨⚡💜🔥";
   const cfg = (await F.getConfig("emoji-trail", null)) ?? {};
-  const emojis = [...new Intl.Segmenter().segment(String(cfg.emojis || DEFAULT))].map((s) => s.segment).filter((s) => s.trim());
+  // Intl.Segmenter hält zusammengesetzte Emojis (👍🏽, 🏳️‍🌈) zusammen; ältere Browser: Zeichen.
+  const text = String(cfg.emojis || DEFAULT);
+  const parts = typeof Intl.Segmenter === "function"
+    ? [...new Intl.Segmenter().segment(text)].map((s) => s.segment)
+    : Array.from(text);
+  const emojis = parts.filter((s) => s.trim());
   if (!emojis.length) return;
 
   const layer = document.createElement("div");

@@ -166,6 +166,8 @@ pub struct MetricsReader {
     proc_dir: PathBuf,
     sys_dir: PathBuf,
     last: Mutex<Option<DeltaSample>>,
+    /// Letztes Ergebnis: Gleichzeitige Abrufe (mehrere Tabs/Geräte) teilen sich eine Messung.
+    recent: Mutex<Option<(std::time::Instant, Metrics)>>,
 }
 
 impl MetricsReader {
@@ -174,6 +176,7 @@ impl MetricsReader {
             proc_dir,
             sys_dir,
             last: Mutex::new(None),
+            recent: Mutex::new(None),
         }
     }
 
@@ -267,7 +270,18 @@ impl MetricsReader {
         max.map(round1)
     }
 
+    /// Aktuelle Werte; Abrufe innerhalb einer Sekunde bekommen dieselbe Messung.
     pub async fn snapshot(&self) -> Metrics {
+        let mut recent = self.recent.lock().await;
+        if let Some((_, m)) = recent.as_ref().filter(|(at, _)| at.elapsed() < Duration::from_secs(1)) {
+            return m.clone();
+        }
+        let m = self.measure().await;
+        *recent = Some((std::time::Instant::now(), m.clone()));
+        m
+    }
+
+    async fn measure(&self) -> Metrics {
         let stat = Self::read(&self.proc_dir.join("stat")).await;
         let (cpu_percent, power_watts) = self.deltas().await;
 

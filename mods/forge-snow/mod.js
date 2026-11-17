@@ -20,6 +20,22 @@
   const ctx = canvas.getContext("2d");
   let w = 0, h = 0, flakes = [], raf = 0, last = performance.now(), wind = 0;
 
+  // Je Farbton eine vorgerenderte, leuchtende Flocke – drawImage statt shadowBlur pro
+  // Flocke und Bild (der Schatten ist beim Canvas-Zeichnen sehr teuer).
+  const sprites = new Map(TINTS.map((rgb) => {
+    const s = document.createElement("canvas");
+    s.width = s.height = 32;
+    const c = s.getContext("2d");
+    const g = c.createRadialGradient(16, 16, 0, 16, 16, 16);
+    g.addColorStop(0, `rgba(${rgb},1)`);
+    g.addColorStop(0.28, `rgba(${rgb},0.9)`);
+    g.addColorStop(0.45, `rgba(${rgb},0.3)`);
+    g.addColorStop(1, `rgba(${rgb},0)`);
+    c.fillStyle = g;
+    c.fillRect(0, 0, 32, 32);
+    return [rgb, s];
+  }));
+
   const flake = (anywhere) => {
     const depth = Math.random(); // 0 = fern, 1 = nah
     return {
@@ -54,21 +70,27 @@
       f.y += f.vy * dt;
       f.x += (wind + Math.sin(now / 1300 + f.phase) * f.sway) * dt;
       if (f.y > h + 10 || f.x < -20 || f.x > w + 20) { flakes[i] = flake(false); continue; }
-      ctx.beginPath();
-      ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(${f.tint},${f.alpha})`;
-      ctx.shadowColor = `rgba(${f.tint},0.8)`;
-      ctx.shadowBlur = f.r * 3;
-      ctx.fill();
+      // Sprite: Kern etwa ein Drittel, Rest ist Schimmer – wie Radius plus Glühen.
+      const size = f.r * 3.6;
+      ctx.globalAlpha = f.alpha;
+      ctx.drawImage(sprites.get(f.tint), f.x - size, f.y - size, size * 2, size * 2);
     }
-    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
     raf = requestAnimationFrame(frame);
   }
 
-  const start = () => { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } };
+  const start = () => { if (!raf && !F.effects.hidden(canvas)) { last = performance.now(); raf = requestAnimationFrame(frame); } };
   const stop = () => { cancelAnimationFrame(raf); raf = 0; };
-  addEventListener("resize", resize, { passive: true });
+  // Größenänderung höchstens einmal pro Bild verarbeiten.
+  let resizeQueued = false;
+  addEventListener("resize", () => {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    requestAnimationFrame(() => { resizeQueued = false; resize(); });
+  }, { passive: true });
+  // Pausieren im Hintergrund-Tab und solange ein ZimaOS-Fenster die Ebene verdeckt.
   document.addEventListener("visibilitychange", () => (document.hidden ? stop() : start()));
+  canvas.addEventListener("zimaforge:visibility", (e) => { if (e.detail.hidden) { stop(); ctx.clearRect(0, 0, w, h); } else start(); });
   resize();
   start();
 })();

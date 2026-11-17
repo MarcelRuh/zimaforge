@@ -97,8 +97,13 @@
     }
   }
 
+  // Während des Ziehens nichts wiederherstellen – sonst springt das Widget zurück,
+  // weil ZimaForge die Umsortierung als Umbau meldet.
+  let dragging = false;
+
   function startDrag(e, el, column) {
     e.preventDefault();
+    dragging = true;
     const grip = e.currentTarget;
     try { grip.setPointerCapture(e.pointerId); } catch { /* Zeiger schon weg */ }
     el.classList.add("zf-order-dragging");
@@ -116,13 +121,16 @@
     };
     const end = () => {
       grip.removeEventListener("pointermove", move);
+      grip.removeEventListener("pointerup", end);
+      grip.removeEventListener("pointercancel", end);
+      dragging = false;
       el.classList.remove("zf-order-dragging");
       column.classList.remove("zf-order-active");
       void persist(column);
     };
     grip.addEventListener("pointermove", move);
-    grip.addEventListener("pointerup", end, { once: true });
-    grip.addEventListener("pointercancel", end, { once: true });
+    grip.addEventListener("pointerup", end);
+    grip.addEventListener("pointercancel", end);
   }
 
   function persist(column) {
@@ -132,6 +140,7 @@
   }
 
   function apply() {
+    if (dragging) return;
     const column = F.dashboard.widgetColumn();
     if (!column) return;
     restore(column);

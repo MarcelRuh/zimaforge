@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# Ein neuer Push auf main bricht den älteren main-Lauf ab; Tag-Läufe laufen immer zu Ende.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref == 'refs/heads/main' }}
+
 env:
   IMAGE: ghcr.io/marcelruh/zimaforge
 
@@ -19,19 +24,30 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Volle Historie, damit die Tag-Prüfung origin/main kennt.
+          fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --locked
-      - name: Version im Tag passt zu Cargo.toml
+      - name: Tag passt zu main, Cargo.toml, Compose-Dateien und CHANGELOG
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           want="${GITHUB_REF_NAME#v}"
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "Tag $GITHUB_REF_NAME zeigt auf einen Commit, der nicht auf main liegt"; exit 1; }
           have="$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)"
           test "$want" = "$have" || { echo "Tag $want ≠ Cargo.toml $have"; exit 1; }
           for f in docker-compose.yml docker-compose.standardport.yml; do
             grep -q "image: ghcr.io/marcelruh/zimaforge:$want\$" "$f" || { echo "$f: Image-Tag ist nicht $want"; exit 1; }
             grep -q "^  version: \"$want\"\$" "$f" || { echo "$f: x-casaos.version ist nicht $want"; exit 1; }
           done
+          awk -v h="## [$want]" 'index($0, h) == 1 { found = 1 } END { exit !found }' CHANGELOG.md \
+            || { echo "CHANGELOG.md: Überschrift ## [$want] fehlt"; exit 1; }
 
   build:
     needs: test
@@ -54,17 +70,68 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Version für das OCI-Label
+        id: version
+        run: |
+          case "$GITHUB_REF" in
+            refs/tags/v*)    version="${GITHUB_REF_NAME#v}" ;;
+            refs/heads/main) version=edge ;;
+            *)               version="sha-${GITHUB_SHA::7}" ;;
+          esac
+          echo "version=$version" >> "$GITHUB_OUTPUT"
       - id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/${{ matrix.arch }}
-          build-args: VERSION=${{ github.ref_name }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            REVISION=${{ github.sha }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ matrix.arch }}
           provenance: mode=max
           sbom: true
+      - name: Smoke-Test (gepushtes Image)
+        env:
+          REF: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+        run: |
+          set -eu
+          docker run --rm "$REF" --version
+          # Wie in den Compose-Dateien: ohne Capabilities, ohne Rechteausweitung.
+          # Der Upstream ist absichtlich nicht erreichbar; Health hängt nicht davon ab.
+          docker run -d --name zf -p 8077:8077 \
+            --cap-drop NET_RAW --cap-drop MKNOD --cap-drop AUDIT_WRITE --cap-drop SYS_CHROOT --cap-drop SETFCAP --cap-drop SETPCAP --cap-drop SETUID --cap-drop SETGID --cap-drop FSETID --cap-drop KILL --security-opt no-new-privileges \
+            -e ZIMAFORGE_UPSTREAM=http://127.0.0.1:9 "$REF"
+          ok=
+          for i in $(seq 1 20); do
+            curl -fsS http://127.0.0.1:8077/_forge/api/health && ok=1 && break
+            sleep 1
+          done
+          test -n "$ok" || { echo "::error::/_forge/api/health antwortet nicht"; exit 1; }
+          echo
+          store="$(curl -fsS http://127.0.0.1:8077/_forge/api/store)"
+          grep -q forge-pulse <<<"$store" || { echo "::error::Katalog ohne forge-pulse"; exit 1; }
+          loader="$(curl -fsS http://127.0.0.1:8077/_forge/runtime/loader.js)"
+          grep -q ZimaForge <<<"$loader" || { echo "::error::loader.js fehlt"; exit 1; }
+          # Docker-HEALTHCHECK (/zimaforge healthcheck) muss "healthy" melden.
+          health=
+          for i in $(seq 1 40); do
+            health="$(docker inspect --format '{{.State.Health.Status}}' zf)"
+            [ "$health" = healthy ] && break
+            [ "$health" = unhealthy ] && break
+            sleep 1
+          done
+          echo "Docker-Health: $health"
+          test "$health" = healthy || { echo "::error::Container ist nicht healthy ($health)"; exit 1; }
+      - name: Container-Logs bei Fehler
+        if: failure()
+        run: |
+          docker logs zf || true
+          docker inspect --format '{{json .State}}' zf || true
+      - name: Container entfernen
+        if: always()
+        run: docker rm -f zf || true
       - name: Digest merken
         run: |
           mkdir -p /tmp/digests

@@ -23,12 +23,17 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 RUN mkdir -p /out/data
 
 FROM scratch
+# VERSION: Release ohne führendes "v" (z. B. 0.4.0) oder "edge" für main.
+# REVISION: Git-Commit, aus dem das Image gebaut wurde.
 ARG VERSION=dev
+ARG REVISION=unknown
 LABEL org.opencontainers.image.title="ZimaForge" \
       org.opencontainers.image.description="Mod framework for the ZimaOS dashboard" \
       org.opencontainers.image.source="https://github.com/MarcelRuh/zimaforge" \
+      org.opencontainers.image.url="https://github.com/MarcelRuh/zimaforge" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.version="${VERSION}"
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.revision="${REVISION}"
 
 COPY --from=build /zimaforge /zimaforge
 COPY --from=build /out/data /data
@@ -42,5 +47,5 @@ ENV ZIMAFORGE_PORT=8077 \
     ZIMAFORGE_SYS=/host/sys
 
 EXPOSE 8077
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD ["/zimaforge", "healthcheck"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --start-interval=2s --retries=3 CMD ["/zimaforge", "healthcheck"]
 ENTRYPOINT ["/zimaforge"]
