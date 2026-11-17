@@ -73,6 +73,17 @@ function emit(event, detail) {
 
 const id = (modId) => encodeURIComponent(modId);
 
+// Vom Server mit der Seite gelieferte Startdaten (aktive Mods, Einstellungen):
+// spart beim Laden die Wartezeit auf /mods und /config/<id>.
+const bootData = (() => {
+  try {
+    const data = JSON.parse(document.getElementById("zimaforge-boot")?.textContent || "null");
+    return data && data.version === VERSION ? data : null;
+  } catch { return null; }
+})();
+// Jede Einstellung nur einmal aus den Startdaten – danach (oder nach setConfig) frisch vom Server.
+const bootConfig = new Map(Object.entries(bootData?.config ?? {}));
+
 const ZimaForge = Object.freeze({
   version: VERSION,
   platform: "zimaos",
@@ -81,10 +92,16 @@ const ZimaForge = Object.freeze({
   runtimeUrl: (rel) => `${BASE}/runtime/${rel}?v=${encodeURIComponent(VERSION)}`,
   sessionToken,
   async getConfig(modId, fallback = null) {
+    if (bootConfig.has(modId)) {
+      const value = bootConfig.get(modId);
+      bootConfig.delete(modId);
+      return value ?? fallback;
+    }
     try { return (await request(`/config/${id(modId)}`)).config ?? fallback; }
     catch { return fallback; }
   },
   async setConfig(modId, config) {
+    bootConfig.delete(modId);
     const result = await request(`/config/${id(modId)}`, { method: "PUT", body: config, write: true });
     emit("config", { id: modId, config: result.config });
     return result.config;
@@ -439,7 +456,8 @@ function addFontFace() {
 
 function loadStyle(mod, rel) {
   const href = `${ZimaForge.assetUrl(mod.id, rel)}?v=${encodeURIComponent(`${mod.version}-${mod.rev ?? 0}`)}`;
-  if (document.querySelector(`link[href="${CSS.escape(href)}"]`)) return;
+  // Nur echte Stylesheets zählen – der Preload-Hinweis des Servers hat dieselbe Adresse.
+  if (document.querySelector(`link[rel="stylesheet"][href="${CSS.escape(href)}"]`)) return;
   const link = document.createElement("link");
   link.rel = "stylesheet";
   link.href = href;
@@ -469,7 +487,7 @@ async function boot() {
     console.error("[ZimaForge] Store konnte nicht geladen werden", err));
 
   try {
-    const mods = await ZimaForge.store.active();
+    const mods = Array.isArray(bootData?.mods) ? bootData.mods : await ZimaForge.store.active();
     for (const mod of mods) {
       for (const style of mod.styles ?? []) loadStyle(mod, style);
       for (const script of mod.scripts ?? []) loadScript(mod, script);

@@ -432,5 +432,22 @@ async fn active_mods_carry_a_revision_stamp() {
         .send(Method::POST, &f.url("/_forge/api/store/neon"), &auth, "")
         .await;
     let v: serde_json::Value = serde_json::from_str(&f.http.get(&f.url("/_forge/api/mods")).await.body).unwrap();
-    assert!(v["mods"][0]["rev"].as_u64().unwrap() > 0);
+    let rev = v["mods"][0]["rev"].as_u64().unwrap();
+    assert!(rev > 0);
+
+    // Die Dashboard-Seite bringt aktive Mods, Einstellungen und Preloads gleich mit.
+    let page = f.http.get(&f.url("/")).await.body;
+    let start = page
+        .find(r#"<script type="application/json" id="zimaforge-boot">"#)
+        .expect(&page);
+    let json = &page[start..];
+    let json = &json[json.find('>').unwrap() + 1..json.find("</script>").unwrap()];
+    let boot: serde_json::Value = serde_json::from_str(json).unwrap();
+    assert_eq!(boot["version"], zimaforge::VERSION);
+    assert_eq!(boot["mods"][0]["id"], "neon");
+    assert!(boot["config"].get("zimaforge").is_some());
+    assert!(page.contains(&format!(
+        r#"<link rel="preload" as="script" href="/_forge/mods/neon/mod.js?v=1.0.0-{rev}">"#
+    )));
+    assert!(page.find("zimaforge-boot").unwrap() < page.find("data-zimaforge-loader").unwrap());
 }

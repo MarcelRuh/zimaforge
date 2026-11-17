@@ -170,7 +170,12 @@ pub async fn forward(State(state): State<AppState>, mut req: Request<Body>) -> R
                 return gateway_error();
             }
         };
-        let html = inject(&bytes, &loader_tag(), LOADER_MARKER);
+        let store = state.store.clone();
+        let tags = match tokio::task::spawn_blocking(move || crate::boot::collect(&store)).await {
+            Ok((mods, config)) => crate::boot::head_tags(&mods, config),
+            Err(_) => loader_tag(),
+        };
+        let html = inject(&bytes, &tags, LOADER_MARKER);
         parts.headers.remove(header::CONTENT_LENGTH);
         parts.headers.remove(header::ETAG);
         parts.headers.remove(header::LAST_MODIFIED);

@@ -448,12 +448,13 @@
     try {
       // Details (Prozess-Scan auf dem Server) nur jeden zweiten Takt, also alle 6 s.
       const wantDetail = !details.hidden && (!detail || ++detailTick % 2 === 0);
-      const [z, m, s] = await Promise.all([
-        zimaUtilization(),
-        F.metrics().catch(() => null),
-        wantDetail ? fetch("/_forge/api/system", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null) : null,
-      ]);
-      if (!z && !m) { card.classList.add("offline"); return; }
+      // Details parallel holen, aber Ringanzeigen nicht darauf warten lassen
+      // (der Prozess-Scan ist der langsamste Abruf).
+      const detailReq = wantDetail
+        ? fetch("/_forge/api/system", { cache: "no-store" }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+        : null;
+      const [z, m] = await Promise.all([zimaUtilization(), F.metrics().catch(() => null)]);
+      if (!z && !m) { card.classList.add("offline"); await detailReq; return; }
       card.classList.remove("offline");
       card.dataset.source = z ? "zimaos" : "zimaforge";
       card.title = z ? "Werte: ZimaOS (wie System-Widget)" : "Werte: ZimaForge-Messung";
@@ -467,11 +468,15 @@
         [watts != null ? `${watts.toFixed(1)} W` : null, temp != null ? `${temp.toFixed(1)} °C` : null].filter(Boolean).join(" / ") || "–");
       setGauge("mem", z?.memPercent ?? m?.memPercent, memTotal ? fmtBytes(memTotal) : "–");
 
+      const s = await detailReq;
       if (s) {
         prevDetail = detail;
         detail = s;
-        await loadAppIndex(s.apps);
+        // Auf App-Namen höchstens kurz warten; kommen sie später, wird nachgezeichnet.
+        const index = loadAppIndex(s.apps);
+        const inTime = await Promise.race([index.then(() => true), sleep(700).then(() => false)]);
         renderPane();
+        if (!inTime) void index.then(() => renderPane());
       }
     } finally {
       busy = false;

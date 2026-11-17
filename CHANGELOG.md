@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.4.0] – 2026-11-17
+
+### Verbessert
+- Schnellerer Start: ZimaForge liefert die aktiven Mods und ihre Einstellungen direkt mit der Dashboard-Seite aus. Dadurch entfallen beim Laden die Abfrage der Mod-Liste und eine Abfrage je Mod-Einstellung. Mod-Dateien und Store laden per Preload parallel zu ZimaOS.
+- Forge Pulse 2.5.4: Die Ringanzeigen erscheinen sofort und warten nicht mehr auf die Prozessliste. Die App-Namen bremsen die Anzeige höchstens 0,7 Sekunden.
+- Weniger Last auf dem Server: Die Prozessliste liest je Prozess nur noch eine Datei statt drei. Die Container-Zuordnung wird je Prozess gemerkt.
+
 ## [0.3.9] – 2026-11-17
 
 ### Behoben

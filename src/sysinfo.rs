@@ -7,6 +7,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
@@ -160,18 +161,37 @@ pub fn parse_cpuinfo(text: &str) -> (Option<String>, Option<f64>) {
     (model, (n > 0).then(|| (sum / f64::from(n)).round()))
 }
 
-/// Name und CPU-Ticks (utime + stime) aus `/proc/<pid>/stat`.
-/// Der Name steht in Klammern und darf Leerzeichen und Klammern enthalten.
-pub fn parse_pid_stat(text: &str) -> Option<(String, u64)> {
+/// Felder aus `/proc/<pid>/stat`, die für die Prozessliste gebraucht werden.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PidStat {
+    pub name: String,
+    /// utime + stime (Ticks)
+    pub ticks: u64,
+    /// Startzeit seit Boot (Ticks) – unterscheidet wiederverwendete PIDs.
+    pub start: Option<u64>,
+    /// Resident Set Size in Seiten (fehlt bei gekürzten Zeilen).
+    pub rss_pages: Option<u64>,
+}
+
+/// Liest `/proc/<pid>/stat`. Der Name steht in Klammern und darf Leerzeichen und Klammern enthalten.
+pub fn parse_pid_stat(text: &str) -> Option<PidStat> {
     let open = text.find('(')?;
     let close = text.rfind(')')?;
     let name = text.get(open + 1..close)?.to_owned();
     let fields: Vec<&str> = text.get(close + 1..)?.split_whitespace().collect();
-    // Nach dem Namen: state(0) ppid(1) … utime(11) stime(12)
+    // Nach dem Namen: state(0) ppid(1) … utime(11) stime(12) … starttime(19) vsize(20) rss(21)
     let utime: u64 = fields.get(11)?.parse().ok()?;
     let stime: u64 = fields.get(12)?.parse().ok()?;
-    Some((name, utime + stime))
+    Some(PidStat {
+        name,
+        ticks: utime + stime,
+        start: fields.get(19).and_then(|s| s.parse().ok()),
+        rss_pages: fields.get(21).and_then(|s| s.parse().ok()),
+    })
 }
+
+/// pid -> (Startzeit, Container) aus dem vorherigen Durchlauf.
+type KnownProcs = HashMap<u32, (Option<u64>, Option<String>)>;
 
 /// Docker-Container-ID (12 Zeichen) aus `/proc/<pid>/cgroup` (cgroup v1 und v2).
 pub fn parse_container_id(cgroup: &str) -> Option<String> {
@@ -287,6 +307,7 @@ pub struct SystemReader {
     docker_dir: PathBuf,
     last: Mutex<Option<Sample>>,
     names: Mutex<HashMap<String, Option<String>>>,
+    known: Arc<StdMutex<KnownProcs>>,
 }
 
 fn read(path: &Path) -> Option<String> {
@@ -302,32 +323,44 @@ impl SystemReader {
             docker_dir,
             last: Mutex::default(),
             names: Mutex::default(),
+            known: Arc::default(),
         }
     }
 
-    fn sample(proc_dir: &Path) -> Sample {
+    /// Ein Durchlauf über `/proc`. Je Prozess wird nur `stat` gelesen; `statm` nur bei
+    /// gekürzten Zeilen, `cgroup` nur für neue Prozesse (gleiche PID und Startzeit
+    /// bedeuten denselben Prozess und damit denselben Container).
+    fn sample(proc_dir: &Path, known: &StdMutex<KnownProcs>) -> Sample {
         let (total, cores) = read(&proc_dir.join("stat"))
             .as_deref()
             .map(parse_cpus)
             .unwrap_or_default();
         let page = 4096u64;
         let mut procs = HashMap::new();
+        let previous = std::mem::take(&mut *known.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut seen = KnownProcs::with_capacity(previous.len());
         if let Ok(entries) = fs::read_dir(proc_dir) {
             for e in entries.flatten() {
                 let Some(pid) = e.file_name().to_str().and_then(|s| s.parse::<u32>().ok()) else {
                     continue;
                 };
                 let dir = e.path();
-                let Some((name, ticks)) = read(&dir.join("stat")).as_deref().and_then(parse_pid_stat) else {
+                let Some(st) = read(&dir.join("stat")).as_deref().and_then(parse_pid_stat) else {
                     continue;
                 };
-                let rss = read(&dir.join("statm"))
-                    .and_then(|s| s.split_whitespace().nth(1)?.parse::<u64>().ok())
-                    .map_or(0, |p| p * page);
-                let container = read(&dir.join("cgroup")).as_deref().and_then(parse_container_id);
-                procs.insert(pid, (name, ticks, rss, container));
+                let rss = st
+                    .rss_pages
+                    .or_else(|| read(&dir.join("statm")).and_then(|s| s.split_whitespace().nth(1)?.parse().ok()))
+                    .map_or(0, |p: u64| p * page);
+                let container = match previous.get(&pid) {
+                    Some((start, c)) if st.start.is_some() && *start == st.start => c.clone(),
+                    _ => read(&dir.join("cgroup")).as_deref().and_then(parse_container_id),
+                };
+                seen.insert(pid, (st.start, container.clone()));
+                procs.insert(pid, (st.name, st.ticks, rss, container));
             }
         }
+        *known.lock().unwrap_or_else(|e| e.into_inner()) = seen;
         Sample {
             total,
             cores,
@@ -417,7 +450,8 @@ impl SystemReader {
 
     pub async fn snapshot(&self) -> SystemDetail {
         let proc_dir = self.proc_dir.clone();
-        let take = move || Self::sample(&proc_dir);
+        let known = self.known.clone();
+        let take = move || Self::sample(&proc_dir, &known);
         let mut now = tokio::task::spawn_blocking(take.clone())
             .await
             .unwrap_or_else(|_| Sample {
@@ -600,7 +634,15 @@ mod tests {
     #[test]
     fn pid_stat_with_tricky_name() {
         let line = "4711 (Plex Media (Serv)) S 1 2 3 4 5 6 7 8 9 10 250 50 0 0 20 0 44 0 100 0";
-        assert_eq!(parse_pid_stat(line), Some(("Plex Media (Serv)".into(), 300)));
+        let st = parse_pid_stat(line).unwrap();
+        assert_eq!(
+            (st.name.as_str(), st.ticks, st.start, st.rss_pages),
+            ("Plex Media (Serv)", 300, Some(100), None)
+        );
+        // Vollständige Zeile: rss (Seiten) direkt aus stat, kein statm nötig.
+        let full = "7 (x) S 1 2 3 4 5 6 7 8 9 10 250 50 0 0 20 0 44 0 100 123456 2048 18446744073709551615";
+        let st = parse_pid_stat(full).unwrap();
+        assert_eq!((st.start, st.rss_pages), (Some(100), Some(2048)));
         assert_eq!(parse_pid_stat("garbage"), None);
     }
 

@@ -6,6 +6,7 @@
 
 pub mod api;
 pub mod auth;
+pub mod boot;
 pub mod config;
 pub mod inject;
 pub mod metrics;
