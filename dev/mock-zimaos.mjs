@@ -13,6 +13,8 @@ import path from "node:path";
 const PORT = Number(process.env.MOCK_PORT || 8081);
 const TOKEN = "dev-session-token";
 const ROOT = path.resolve(process.argv[2] || "dev-data");
+// MOCK_FLAKY=n: die ersten n Abrufe der App-Liste schlagen fehl (wie ein ZimaOS beim Start).
+let flaky = Number(process.env.MOCK_FLAKY || 0);
 
 const page = `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -92,6 +94,7 @@ http
     }
     if (url.pathname === "/v2/app_management/web/appgrid") {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      if (flaky > 0) { flaky--; res.writeHead(500); return res.end(); }
       res.writeHead(200, { "content-type": "application/json" });
       return res.end(JSON.stringify({ data: [
         { name: "plex", title: { en_us: "Plex" }, icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Plex/icon.png" },

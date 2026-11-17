@@ -118,17 +118,33 @@
   /* ───────── Apps: Container -> ZimaOS-App (Titel, Icon) ───────── */
 
   // ZimaOS-App-Verwaltung: App-Liste (Titel, Icon) und je App die Container-IDs.
+  // Vollständige Liste: 5 min gültig. Fehlt etwas (Abruf fehlgeschlagen, App neu gestartet
+  // und damit neue Container-ID), wird nach spätestens 15 s neu geladen.
   let appIndex = null;
   let appIndexAt = 0;
-  async function loadAppIndex() {
-    if (appIndex && Date.now() - appIndexAt < 5 * 60_000) return appIndex;
+  let appIndexComplete = false;
+  let appIndexLoading = null;
+  const knowsAll = (apps) => (apps ?? []).every((a) => a.containers.some((id) => appIndex?.has(id))
+    || appIndex?.has(`name:${a.name.toLowerCase()}`));
+
+  function loadAppIndex(apps) {
+    const age = Date.now() - appIndexAt;
+    const fresh = appIndex && (appIndexComplete && knowsAll(apps) ? age < 5 * 60_000 : age < 15_000);
+    if (fresh) return Promise.resolve(appIndex);
+    appIndexLoading ??= fetchAppIndex().finally(() => { appIndexLoading = null; });
+    return appIndexLoading;
+  }
+
+  async function fetchAppIndex() {
     const map = new Map();
+    let complete = false;
     const token = F.sessionToken();
     if (token) {
-      const opts = { headers: { Authorization: token } };
+      const opts = { headers: { Authorization: token }, cache: "no-store" };
       try {
         const res = await fetch("/v2/app_management/web/appgrid", opts);
         const grid = res.ok ? (await res.json())?.data ?? [] : [];
+        complete = res.ok;
         await Promise.all((Array.isArray(grid) ? grid : []).filter((a) => a?.name).map(async (a) => {
           const t = a.title;
           const title = (t && typeof t === "object" ? t.de_de || t.en_us || Object.values(t)[0] : t) || a.name;
@@ -136,19 +152,26 @@
           map.set(`name:${String(a.name).toLowerCase()}`, meta);
           try {
             const r = await fetch(`/v2/app_management/compose/${encodeURIComponent(a.name)}/containers`, opts);
-            if (!r.ok) return;
+            if (!r.ok) { complete = false; return; }
             const containers = (await r.json())?.data?.containers ?? {};
             for (const [key, c] of Object.entries(containers)) {
               const id = String(c?.ID ?? c?.Id ?? c?.id ?? key).toLowerCase();
               if (/^[0-9a-f]{12,64}$/.test(id)) map.set(id.slice(0, 12), meta);
+              // Containername (z. B. „jellyfin“) als zweiter Schlüssel.
+              for (const n of [c?.Name, ...(Array.isArray(c?.Names) ? c.Names : [])]) {
+                if (typeof n === "string" && n) map.set(`name:${n.replace(/^\//, "").toLowerCase()}`, meta);
+              }
             }
-          } catch { /* App ohne Container-Info */ }
+          } catch { complete = false; }
         }));
-      } catch { /* ohne ZimaOS-App-Liste */ }
+      } catch { complete = false; }
     }
-    appIndex = map;
+    // Ein fehlgeschlagener Abruf ersetzt keine bereits bekannte Zuordnung.
+    if (complete || !appIndex?.size) appIndex = map;
+    else for (const [k, v] of map) appIndex.set(k, v);
+    appIndexComplete = complete;
     appIndexAt = Date.now();
-    return map;
+    return appIndex;
   }
   void loadAppIndex();
 
@@ -159,7 +182,8 @@
       const meta = a.containers.map((id) => appIndex?.get(id)).find(Boolean)
         ?? appIndex?.get(`name:${a.name.toLowerCase()}`)
         ?? (/^[0-9a-f]{12}$/.test(a.name) ? null : { title: a.name, icon: null });
-      const key = meta?.title ?? "Sonstige Container";
+      // Nicht zuordenbar: trotzdem einzeln zeigen, nie zu einem Sammeleintrag zusammenfassen.
+      const key = meta?.title ?? `Container ${a.name.slice(0, 12)}`;
       const g = groups.get(key) ?? { title: key, icon: meta?.icon ?? null, cpu: 0, mem: 0, other: !meta };
       g.cpu += a.cpuPercent;
       g.mem += a.memBytes;
@@ -446,7 +470,7 @@
       if (s) {
         prevDetail = detail;
         detail = s;
-        await loadAppIndex();
+        await loadAppIndex(s.apps);
         renderPane();
       }
     } finally {

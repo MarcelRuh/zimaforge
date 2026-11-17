@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.3.9] – 2026-11-17
+
+### Behoben
+- Forge Pulse 2.5.3: Im CPU- und RAM-Reiter stand zeitweise nur „Sonstige Container“. Schlug das Laden der ZimaOS-App-Liste einmal fehl oder bekam eine App nach einem Neustart eine neue Container-ID, blieb die Zuordnung bis zu 5 Minuten leer. Jetzt lädt Pulse dann nach spätestens 15 Sekunden neu und behält bekannte Zuordnungen. Nicht zuordenbare Container erscheinen einzeln statt als Sammeleintrag.
+
 ## [0.3.8] – 2026-11-17
 
 ### Behoben
