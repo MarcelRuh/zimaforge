@@ -92,6 +92,23 @@ http
       res.writeHead(ok ? 200 : 401, { "content-type": "application/json" });
       return res.end(ok ? '{"data":{"username":"admin"}}' : '{"message":"unauthorized"}');
     }
+    // App Store → Meine Apps → Aktualisieren (Form wie CasaOS-AppManagement).
+    if (url.pathname === "/v2/app_management/apps/upgradable") {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ message: "ok", data: [
+        { store_app_id: "plex", title: "Plex", version: "1.41.2", status: "idle", icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Plex/icon.png" },
+        { store_app_id: "immich", title: { en_us: "Immich" }, version: "v1.119.0", status: "idle", icon: "" },
+      ] }));
+    }
+    const stableMatch = url.pathname.match(/^\/v2\/app_management\/apps\/([^/]+)\/stable$/);
+    if (stableMatch) {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      const tags = { plex: "1.41.3", immich: "v1.120.1" };
+      const tag = tags[decodeURIComponent(stableMatch[1])];
+      res.writeHead(tag ? 200 : 404, { "content-type": "application/json" });
+      return res.end(JSON.stringify(tag ? { message: "ok", data: { tag } } : { message: "not found" }));
+    }
     if (url.pathname === "/v2/app_management/web/appgrid") {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
       if (flaky > 0) { flaky--; res.writeHead(500); return res.end(); }

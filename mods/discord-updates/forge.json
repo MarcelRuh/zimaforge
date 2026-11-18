@@ -1,0 +1,12 @@
+{
+  "name": "Discord-Updates",
+  "version": "1.0.0",
+  "description": "Meldet verfügbare App-Updates aus dem ZimaOS App Store als Embed in einen Discord-Kanal (Webhook) – mit App-Icon und alter und neuer Version. Jedes Update wird nur einmal gemeldet, auch bei mehreren Geräten. Prüft, solange ein Dashboard offen ist.",
+  "category": "Benachrichtigungen",
+  "authors": [{ "name": "MarcelRuh", "url": "https://github.com/MarcelRuh" }],
+  "origin": { "type": "native", "source": "https://github.com/MarcelRuh/zimaforge/tree/main/mods/discord-updates" },
+  "tags": ["discord", "webhook", "updates", "app store", "benachrichtigung"],
+  "icon": "icon.svg",
+  "scripts": ["mod.js"],
+  "styles": ["mod.css"]
+}

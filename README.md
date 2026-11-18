@@ -26,12 +26,13 @@ ZimaForge sitzt als Reverse-Proxy vor dem ZimaOS-Dashboard, schleust einen klein
 
 | Mod                     | Beschreibung                                                                                          |
 |-------------------------|-------------------------------------------------------------------------------------------------------|
-| **Forge Pulse**         | System-Widget im Aufbau des ZimaOS-System-Widgets: Ringanzeigen für CPU und RAM, **Leistung in Watt**, Temperatur, RAM-Größe; aufklappbar mit Last, Netzwerk und Laufzeit |
+| **Forge Pulse**         | System-Widget im Aufbau des ZimaOS-System-Widgets: Ringanzeigen für CPU und RAM, **Leistung in Watt**, Temperatur, RAM-Größe; aufklappbar mit Apps, Datenträgern, Netzwerk und Prozessen, ☰ öffnet btop |
 | **Forge Wetter**        | Wetter-Widget mit aktueller Lage und 4-Tage-Vorschau (Open-Meteo, ohne API-Schlüssel), Ort per Suche  |
 | **Widget-Reihenfolge**  | Widgets der ZimaOS-Spalte per Griff (oder Pfeiltasten) umsortieren; Reihenfolge bleibt gespeichert    |
 | **ora Widgets**         | Neon-Rahmen und Glas-Look für die nativen ZimaOS-Widgets                                              |
 | **ora Polish**          | Pinke Textauswahl, Neon-Scrollbars, cyanfarbene Fokusrahmen und dezente Vignette                      |
 | **Tab-Titel**           | Zeigt Server und Netz im Browser-Tab, z. B. „ZimaOS · nas (LAN)“                                      |
+| **Discord-Updates**     | Meldet App-Updates aus dem ZimaOS App Store als Embed in einen Discord-Kanal (Webhook), jedes Update nur einmal. Prüft, solange ein Dashboard offen ist |
 | **Forge Sparks**        | Aufsteigende Neon-Funken über dem Dashboard                                                           |
 | **Forge Schnee**        | Fallender Schnee mit leichtem Neon-Schimmer                                                           |
 | **Emoji-Spur**          | Emoji-Spur hinter Maus und Finger, Emojis frei wählbar                                                |

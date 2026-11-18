@@ -2,6 +2,11 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.6.0] – 2026-11-18
+
+### Neu
+- **Discord-Updates** 1.0.0: meldet verfügbare App-Updates aus dem ZimaOS App Store („Meine Apps → Aktualisieren“) als Embed in einen Discord-Kanal – Icon, alte und neue Version, bis zu 10 Apps je Nachricht. Jedes Update wird nur einmal gemeldet, auch über mehrere Tabs und Geräte; eine neue Version derselben App wird wieder gemeldet. Einrichtung im eigenen Widget (Webhook-Adresse, Prüfabstand 15 Min. bis 24 Std., Testnachricht, „Jetzt prüfen“). Prüft, solange ein Dashboard geöffnet ist.
+
 ## [0.5.0] – 2026-11-17
 
 Durchsicht des gesamten Projekts.
