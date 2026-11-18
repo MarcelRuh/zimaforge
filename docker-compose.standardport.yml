@@ -6,7 +6,7 @@ name: zimaforge
 
 services:
   zimaforge:
-    image: ghcr.io/marcelruh/zimaforge:0.6.2
+    image: ghcr.io/marcelruh/zimaforge:0.6.3
     container_name: zimaforge
     # Host-Netzwerk: ZimaForge belegt Port 80 und erreicht ZimaOS auf 127.0.0.1:8081.
     network_mode: host
@@ -93,6 +93,6 @@ x-casaos:
         Sonst ist Port 80 belegt und ZimaForge startet nicht.
         Danach ist http://<ZIMAOS-IP>/ dein Dashboard mit Mods;
         läuft ZimaForge nicht, bleibt ZimaOS unter http://<ZIMAOS-IP>:8081 erreichbar.
-  version: "0.6.2"
+  version: "0.6.3"
   repo: https://github.com/MarcelRuh/zimaforge
   support: https://github.com/MarcelRuh/zimaforge/issues
