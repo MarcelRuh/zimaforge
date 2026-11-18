@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.6.1] – 2026-11-18
+
+### Behoben
+- Widget-Reihenfolge 1.1.2:
+  - Ziehen mit der Maus endete nie: Beim ersten Umsetzen verlor der Griff den Zeiger, das Widget rückte nur einen Platz, blieb gestrichelt markiert, nichts wurde gespeichert – und danach stellte der Mod keine Reihenfolge mehr her. Bewegung und Loslassen werden jetzt am Fenster verfolgt.
+  - Klicks und Drücken auf den Griff gingen an das Widget weiter (in ZimaOS öffnet das z. B. die Storage- oder Netzwerk-Einstellungen).
+  - Über angeheftete Widgets ließ sich nichts verschieben: Das Widget landete zwischen Uhr und Pulse und sprang zurück. Uhr mit Wetter und Pulse gilt jetzt als ein Block – per Maus und per Pfeiltasten.
+  - Die Uhr wird fest als „Uhr“ erkannt statt über ihren ersten Text, der der Wochentag sein kann und sich täglich ändert.
+
 ## [0.6.0] – 2026-11-18
 
 ### Neu
