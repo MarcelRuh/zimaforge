@@ -15,6 +15,7 @@ const TOKEN = "dev-session-token";
 const ROOT = path.resolve(process.argv[2] || "dev-data");
 // MOCK_FLAKY=n: die ersten n Abrufe der App-Liste schlagen fehl (wie ein ZimaOS beim Start).
 let flaky = Number(process.env.MOCK_FLAKY || 0);
+let mockChecks = 0; // wie oft „Check again“ (update/check) angestoßen wurde
 
 const page = `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -92,7 +93,35 @@ http
       res.writeHead(ok ? 200 : 401, { "content-type": "application/json" });
       return res.end(ok ? '{"data":{"username":"admin"}}' : '{"message":"unauthorized"}');
     }
-    // App Store → Meine Apps → Aktualisieren (Form wie CasaOS-AppManagement).
+    if (url.pathname === "/__mock/checks") { res.writeHead(200, { "content-type": "application/json" }); return res.end(JSON.stringify({ checks: mockChecks })); }
+    // ZimaOS-App-Store („zimaapp“-Schnittstelle, Form wie auf einem echten ZimaOS).
+    if (url.pathname.startsWith("/v2/app_management/zimaapp/")) {
+      if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
+      const send = (data) => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify({ data, message: "OK" })); };
+      const sub = url.pathname.slice("/v2/app_management/zimaapp".length);
+      if (sub === "/update/check" && req.method === "POST") { mockChecks++; return send({ succeeded: [], failed: [] }); }
+      if (sub === "/updates") {
+        return send({ items: [
+          { zimaapp_id: "zimaapp://v2app/plex", title: "Plex", icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Plex/icon.png", availability: "available",
+            changes: [{ type: "version", current_version: "1.41.2", target_version: "1.41.3" }], changelog: "Fehlerbehebungen und schnellere Bibliothekssuche." },
+          { zimaapp_id: "zimaapp://v2app/immich", title: "Immich", icon: "", availability: "ignored",
+            changes: [{ type: "version", current_version: "v1.119.0", target_version: "v1.120.1" }] },
+        ] });
+      }
+      if (sub === "/update/ignored") return send({ items: [] });
+      if (sub === "/v2app/images/drift/list") {
+        return send({ items: [{
+          compose_revision: "sha256:ad2c2376", drift_revision: "651b6d73bf5e5901",
+          icon: "https://github.com/MarcelRuh/zimaforge/blob/main/assets/icon.png?raw=true",
+          id: "custom__zf", name: "custom__zf", installed_version: "0.1.0", zimaapp_id: "zimaapp://v2app/custom__zf",
+          title: { custom: "ZimaForge", de_de: "ZimaForge", en_us: "ZimaForge" },
+          images: [{ current_digests: ["sha256:b608ad7a1bd5a2ec7d41"], current_image: "ghcr.io/marcelruh/zimaforge:latest", service: "zimaforge",
+            target_digest: "sha256:a8945eed1cb5b7def20a", target_image: "ghcr.io/marcelruh/zimaforge:latest" }],
+        }] });
+      }
+      res.writeHead(404); return res.end();
+    }
+    // App Store → Meine Apps → Aktualisieren (Form wie CasaOS-AppManagement; ältere Systeme).
     if (url.pathname === "/v2/app_management/apps/upgradable") {
       if (req.headers.authorization !== TOKEN) { res.writeHead(401); return res.end(); }
       res.writeHead(200, { "content-type": "application/json" });

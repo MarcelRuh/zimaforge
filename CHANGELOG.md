@@ -2,6 +2,15 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.6.2] – 2026-11-18
+
+### Behoben
+- Discord-Updates 1.1.0 nutzt die Update-Schnittstelle von ZimaOS (`/v2/app_management/zimaapp/…`) – bisher fragte der Mod eine Schnittstelle älterer Versionen ab und fand auf aktuellen ZimaOS-Systemen keine Updates.
+  - Prüft wie „Check again“ im App Store (`update/check` für alle Apps, neuer Image-Abgleich) und liest danach die Liste.
+  - Meldet **App-Updates** (alte → neue Version, Änderungen aus dem App Store) und **neue Images unter gleichem Tag** wie `:latest` (Digest alt → neu, in Cyan).
+  - Ignorierte Updates werden ausgelassen; jedes neue Image hat eine eigene Kennung und wird einmal gemeldet.
+  - Ältere Systeme ohne `zimaapp`-Schnittstelle nutzen weiterhin die bisherige Abfrage.
+
 ## [0.6.1] – 2026-11-18
 
 ### Behoben

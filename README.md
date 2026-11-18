@@ -32,7 +32,7 @@ ZimaForge sitzt als Reverse-Proxy vor dem ZimaOS-Dashboard, schleust einen klein
 | **ora Widgets**         | Neon-Rahmen und Glas-Look für die nativen ZimaOS-Widgets                                              |
 | **ora Polish**          | Pinke Textauswahl, Neon-Scrollbars, cyanfarbene Fokusrahmen und dezente Vignette                      |
 | **Tab-Titel**           | Zeigt Server und Netz im Browser-Tab, z. B. „ZimaOS · nas (LAN)“                                      |
-| **Discord-Updates**     | Meldet App-Updates aus dem ZimaOS App Store als Embed in einen Discord-Kanal (Webhook), jedes Update nur einmal. Prüft, solange ein Dashboard offen ist |
+| **Discord-Updates**     | Meldet App-Updates und neue Images (z. B. `:latest`) aus dem ZimaOS App Store als Embed in einen Discord-Kanal (Webhook), jedes Update nur einmal. Prüft, solange ein Dashboard offen ist |
 | **Forge Sparks**        | Aufsteigende Neon-Funken über dem Dashboard                                                           |
 | **Forge Schnee**        | Fallender Schnee mit leichtem Neon-Schimmer                                                           |
 | **Emoji-Spur**          | Emoji-Spur hinter Maus und Finger, Emojis frei wählbar                                                |

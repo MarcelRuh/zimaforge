@@ -10,10 +10,13 @@
 
   const ID = "discord-updates";
   const API = "/v2/app_management";
-  const DEFAULTS = { webhook: "", interval: 30, enabled: true, sent: {}, lastCheck: 0 };
+  // trigger: vor dem Abfragen wie „Check again“ eine Prüfung anstoßen.
+  const DEFAULTS = { webhook: "", interval: 30, enabled: true, trigger: true, sent: {}, lastCheck: 0 };
   const INTERVALS = [15, 30, 60, 180, 360, 720, 1440];
   const LOCK_KEY = "zf-discord-updates:lock";
-  const COLOR = 0xff006e; // ZimaForge-Pink
+  const COLOR = 0xff006e; // ZimaForge-Pink: neue Version
+  const COLOR_IMAGE = 0x00b4d8; // Cyan: neues Image unter gleichem Tag
+  const LOCALE = (navigator.language || "de-DE").replace("-", "_");
   const AVATAR = "https://raw.githubusercontent.com/MarcelRuh/zimaforge/main/assets/icon.png";
   // Nur echte Discord-Webhooks – die Adresse landet in einer Anfrage aus deinem Browser.
   const WEBHOOK = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/webhooks\/\d{5,25}\/[\w-]{20,120}$/;
@@ -75,39 +78,141 @@
     }
   }
 
-  /** Apps mit verfügbarem Update – wie der Reiter „Aktualisieren“ im App Store. */
-  async function upgradable() {
-    const res = await fetch(`${API}/apps/upgradable`, { headers: auth(), cache: "no-store" });
-    if (res.status === 401) throw new Error("ZimaOS-Anmeldung abgelaufen.");
-    if (!res.ok) throw new Error(`ZimaOS antwortet mit ${res.status}.`);
-    const body = await res.json();
+  const getJson = async (path, init = {}) => {
+    const res = await fetch(`${API}${path}`, {
+      cache: "no-store",
+      ...init,
+      headers: { ...auth(), ...(init.body ? { "Content-Type": "application/json" } : {}), ...init.headers },
+    });
+    if (res.status === 401) throw Object.assign(new Error("ZimaOS-Anmeldung abgelaufen."), { status: 401 });
+    if (!res.ok) throw Object.assign(new Error(`ZimaOS antwortet mit ${res.status}.`), { status: res.status });
+    return res.json();
+  };
+  const items = (body) => (Array.isArray(body?.data?.items) ? body.data.items : []);
+  const clean = (v) => {
+    const s = String(v ?? "").trim();
+    // Wie der App Store: Platzhalter wie „0.0.0“, „n/a“, „unknown“ gelten als unbekannt.
+    return !s || /^(?:v?0+(?:\.0+)*(?:[-+].*)?|n\/?a|unknown|none|null|undefined|[-–—]+)$/i.test(s) ? "" : s;
+  };
+  const shortDigest = (d) => String(d ?? "").replace(/^sha256:/, "").slice(0, 12);
+
+  /**
+   * Wie „Check again“ im App Store: Update-Prüfung für alle Apps (`items: []`) und einen
+   * neuen Abgleich der Images anstoßen. Nur Abfragen – installiert wird nichts.
+   */
+  async function triggerCheck() {
+    await Promise.allSettled([
+      getJson("/zimaapp/update/check", { method: "POST", body: JSON.stringify({ items: [], locale: LOCALE, options: { sync: true } }) }),
+      getJson("/zimaapp/v2app/images/drift/list", { method: "POST", body: JSON.stringify({ options: { sync: false } }) }),
+    ]);
+  }
+
+  /** App-Updates aus dem App Store (neue Version). Ignorierte haben eine andere `availability`. */
+  async function appUpdates() {
+    return items(await getJson(`/zimaapp/updates?locale=${encodeURIComponent(LOCALE)}`))
+      .filter((u) => u?.zimaapp_id && u.availability === "available")
+      .map((u) => {
+        const ch = (u.changes ?? []).find((c) => c?.type === "version")
+          ?? (u.changes ?? []).find((c) => c?.current_version || c?.target_version) ?? {};
+        const latest = clean(ch.target_version);
+        return {
+          kind: "app",
+          id: String(u.zimaapp_id),
+          title: titleOf(u.title, u.zimaapp_id).trim(),
+          icon: typeof u.icon === "string" ? u.icon.trim() : "",
+          version: clean(ch.current_version),
+          latest,
+          changelog: String(u.changelog ?? "").trim(),
+          key: latest || String(u.changelog ?? "").trim().slice(0, 80) || "update",
+        };
+      });
+  }
+
+  /** Neue Images unter gleichem Tag (z. B. `:latest`) – „Image-Änderungen“ im App Store. */
+  async function imageUpdates() {
+    return items(await getJson("/zimaapp/v2app/images/drift/list"))
+      .map((d) => {
+        const changed = (d?.images ?? []).filter((img) => img?.target_digest
+          && !(Array.isArray(img.current_digests) ? img.current_digests : []).includes(img.target_digest));
+        if (!d?.zimaapp_id || !changed.length) return null;
+        return {
+          kind: "image",
+          id: `image:${d.zimaapp_id}`,
+          title: titleOf(d.title, d.name || d.zimaapp_id).trim(),
+          icon: typeof d.icon === "string" ? d.icon.trim() : "",
+          version: clean(d.installed_version),
+          images: changed.map((img) => ({
+            image: String(img.target_image || img.current_image || ""),
+            from: shortDigest(img.current_digests?.[0]),
+            to: shortDigest(img.target_digest),
+          })),
+          // Jede Änderung hat eine eigene Kennung – so wird jedes neue Image einmal gemeldet.
+          key: String(d.drift_revision || changed.map((i) => i.target_digest).join(",")),
+        };
+      })
+      .filter(Boolean);
+  }
+
+  /** Ältere ZimaOS-/CasaOS-Versionen ohne `zimaapp`-Schnittstelle. */
+  async function legacyUpdates() {
+    const body = await getJson("/apps/upgradable");
     const list = Array.isArray(body?.data) ? body.data : [];
     const apps = list
       .filter((a) => a?.store_app_id && a.status !== "updating")
       .map((a) => ({
+        kind: "app",
         id: String(a.store_app_id),
         title: titleOf(a.title, a.store_app_id),
         version: a.version ? String(a.version) : "",
         icon: typeof a.icon === "string" ? a.icon : "",
+        changelog: "",
       }));
     await Promise.all(apps.map(async (a) => { a.latest = await stableVersion(a.id); }));
-    // Schlüssel für „schon gemeldet“: neue Version, sonst die installierte.
     for (const a of apps) a.key = a.latest || `>${a.version}`;
     return apps;
+  }
+
+  /** Alles, was der Reiter „Aktualisieren“ zeigt: App-Updates und neue Images. */
+  async function upgradable() {
+    if (config.trigger !== false) await triggerCheck();
+    let apps;
+    try {
+      apps = await appUpdates();
+    } catch (err) {
+      if (err.status !== 404) throw err;
+      return legacyUpdates();
+    }
+    let images = [];
+    try { images = await imageUpdates(); } catch (err) { if (err.status === 401) throw err; }
+    // Hat eine App beides, reicht die Meldung mit der neuen Version.
+    const withVersion = new Set(apps.map((a) => a.id));
+    return [...apps, ...images.filter((i) => !withVersion.has(i.id.slice("image:".length)))];
   }
 
   /* ───────────────────────── Discord ───────────────────────── */
 
   function embedFor(app) {
-    const versions = app.latest
-      ? `**${md(app.version || "?")}** → **${md(app.latest)}**`
-      : `Installiert: **${md(app.version || "?")}**`;
+    const where = "In ZimaOS unter **App Store → Meine Apps → Aktualisieren** installieren.";
+    let title, description;
+    if (app.kind === "image") {
+      title = `Neues Image: ${app.title}`;
+      const lines = app.images.slice(0, 5).map((i) => `\`${md(i.image)}\`${i.from ? ` · ${i.from} → ${i.to}` : ` · neu: ${i.to}`}`);
+      description = `${lines.join("\n")}\n\nGleicher Tag, neuer Inhalt.${app.version ? ` Installiert: **${md(app.version)}**.` : ""}\n\n${where}`;
+    } else {
+      title = `Update verfügbar: ${app.title}`;
+      const versions = app.latest
+        ? (app.version ? `**${md(app.version)}** → **${md(app.latest)}**` : `Neue Version **${md(app.latest)}**`)
+        : `Installiert: **${md(app.version || "?")}**`;
+      // Änderungen (falls der App Store welche nennt), gekürzt – Discord erlaubt 4096 Zeichen.
+      const notes = app.changelog ? `\n\n${app.changelog.length > 600 ? `${app.changelog.slice(0, 600)} …` : app.changelog}` : "";
+      description = `${versions}${notes}\n\n${where}`;
+    }
     const embed = {
       author: { name: "ZimaOS App Store" },
-      title: `Update verfügbar: ${app.title}`.slice(0, 256),
+      title: title.slice(0, 256),
       url: `${location.origin}/`,
-      description: `${versions}\n\nIn ZimaOS unter **App Store → Meine Apps → Aktualisieren** installieren.`,
-      color: COLOR,
+      description: description.slice(0, 4000),
+      color: app.kind === "image" ? COLOR_IMAGE : COLOR,
       footer: { text: `ZimaForge · ${location.host}` },
       timestamp: new Date().toISOString(),
     };
@@ -248,7 +353,7 @@
       <p class="zf-discord-line ${state.status === "error" ? "err" : ""}" aria-live="polite">${esc(line)}</p>
       ${n ? `<ul class="zf-discord-apps">${state.updates.slice(0, 5).map((a) => `
         <li>${/^https?:\/\//i.test(a.icon) || a.icon.startsWith("/") ? `<img src="${esc(a.icon)}" alt="" loading="lazy">` : `<i>${esc(a.title[0] ?? "?")}</i>`}
-          <span>${esc(a.title)}</span><b>${esc(a.latest ? `${a.version} → ${a.latest}` : a.version)}</b></li>`).join("")}</ul>` : ""}
+          <span>${esc(a.title)}</span><b>${esc(a.kind === "image" ? "neues Image" : a.latest ? (a.version ? `${a.version} → ${a.latest}` : a.latest) : a.version)}</b></li>`).join("")}</ul>` : ""}
       ${state.message && state.status === "ok" ? `<p class="zf-discord-note">${esc(state.message)}</p>` : ""}
       ${configured ? `<button type="button" class="zf-discord-link" data-act="check">Jetzt prüfen</button>` : ""}`;
   }
