@@ -146,8 +146,9 @@
             from: shortDigest(img.current_digests?.[0]),
             to: shortDigest(img.target_digest),
           })),
-          // Jede Änderung hat eine eigene Kennung – so wird jedes neue Image einmal gemeldet.
-          key: String(d.drift_revision || changed.map((i) => i.target_digest).join(",")),
+          // ZimaOS behält `drift_revision` bei, auch wenn inzwischen ein noch neueres Image
+          // bereitliegt – erst mit den Ziel-Digests wird jedes neue Image einmal gemeldet.
+          key: `${d.drift_revision ?? ""}:${changed.map((i) => i.target_digest).sort().join(",")}`,
         };
       })
       .filter(Boolean);
