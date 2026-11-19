@@ -16,6 +16,23 @@ const ROOT = path.resolve(process.argv[2] || "dev-data");
 // MOCK_FLAKY=n: die ersten n Abrufe der App-Liste schlagen fehl (wie ein ZimaOS beim Start).
 let flaky = Number(process.env.MOCK_FLAKY || 0);
 let mockChecks = 0; // wie oft „Check again“ (update/check) angestoßen wurde
+let driftSynced = false; // SABnzbd-Image erscheint erst nach einem Abgleich
+const ZF_DRIFT = {
+  compose_revision: "sha256:ad2c2376", drift_revision: "651b6d73bf5e5901",
+  icon: "https://github.com/MarcelRuh/zimaforge/blob/main/assets/icon.png?raw=true",
+  id: "custom__zf", name: "custom__zf", installed_version: "0.1.0", zimaapp_id: "zimaapp://v2app/custom__zf",
+  title: { custom: "ZimaForge", de_de: "ZimaForge", en_us: "ZimaForge" },
+  images: [{ current_digests: ["sha256:b608ad7a1bd5a2ec7d41"], current_image: "ghcr.io/marcelruh/zimaforge:latest", service: "zimaforge",
+    target_digest: "sha256:a8945eed1cb5b7def20a", target_image: "ghcr.io/marcelruh/zimaforge:latest" }],
+};
+const SAB_DRIFT = {
+  compose_revision: "sha256:5ab0", drift_revision: "dc2c281368b937c6",
+  icon: "https://cdn.jsdelivr.net/gh/IceWhaleTech/CasaOS-AppStore@main/Apps/Sabnzbd/icon.png",
+  id: "sabnzbd", name: "sabnzbd", installed_version: "4.5.5", zimaapp_id: "zimaapp://v2app/sabnzbd",
+  title: { custom: "Sabnzbd", de_de: "Sabnzbd", en_us: "Sabnzbd" },
+  images: [{ current_digests: ["sha256:2bdcbbb87a7a"], current_image: "linuxserver/sabnzbd:latest", service: "sabnzbd",
+    target_digest: "sha256:2808bdbb0f9b", target_image: "linuxserver/sabnzbd:latest" }],
+};
 
 const page = `<!doctype html>
 <html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -110,14 +127,21 @@ http
       }
       if (sub === "/update/ignored") return send({ items: [] });
       if (sub === "/v2app/images/drift/list") {
-        return send({ items: [{
-          compose_revision: "sha256:ad2c2376", drift_revision: "651b6d73bf5e5901",
-          icon: "https://github.com/MarcelRuh/zimaforge/blob/main/assets/icon.png?raw=true",
-          id: "custom__zf", name: "custom__zf", installed_version: "0.1.0", zimaapp_id: "zimaapp://v2app/custom__zf",
-          title: { custom: "ZimaForge", de_de: "ZimaForge", en_us: "ZimaForge" },
-          images: [{ current_digests: ["sha256:b608ad7a1bd5a2ec7d41"], current_image: "ghcr.io/marcelruh/zimaforge:latest", service: "zimaforge",
-            target_digest: "sha256:a8945eed1cb5b7def20a", target_image: "ghcr.io/marcelruh/zimaforge:latest" }],
-        }] });
+        // Wie ZimaOS: GET liefert den letzten Abgleich. POST mit `sync:false` antwortet sofort
+        // (202, alter Stand) und gleicht im Hintergrund ab, `sync:true` wartet auf das Ergebnis.
+        const list = () => ({ items: driftSynced ? [ZF_DRIFT, SAB_DRIFT] : [ZF_DRIFT] });
+        if (req.method !== "POST") return send(list());
+        let raw = "";
+        req.on("data", (c) => { raw += c; });
+        req.on("end", () => {
+          let sync = false;
+          try { sync = JSON.parse(raw || "{}")?.options?.sync === true; } catch { /* leer */ }
+          if (sync) return setTimeout(() => { driftSynced = true; send(list()); }, 800);
+          res.writeHead(202, { "content-type": "application/json" });
+          res.end(JSON.stringify({ data: list(), message: "Accepted" }));
+          setTimeout(() => { driftSynced = true; }, 2000);
+        });
+        return;
       }
       res.writeHead(404); return res.end();
     }

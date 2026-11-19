@@ -2,6 +2,13 @@
 
 Alle nennenswerten Änderungen an ZimaForge. Format nach [Keep a Changelog](https://keepachangelog.com/de/1.1.0/), Versionierung nach [SemVer](https://semver.org/lang/de/).
 
+## [0.6.5] – 2026-11-19
+
+### Behoben
+- Discord-Updates 1.1.2:
+  - Mehrere Updates in einer Nachricht erschienen in Discord als ein einziges Embed – Discord fasst Embeds mit gleicher Adresse zusammen. Jedes Embed hat jetzt eine eigene.
+  - Beim ersten Prüfen fehlten neu gefundene Images: ZimaOS gleicht Images im Hintergrund ab, der Mod las vorher den alten Stand. Er wartet jetzt auf den fertigen Abgleich (`sync: true`, einige Sekunden).
+
 ## [0.6.4] – 2026-11-18
 
 ### Behoben

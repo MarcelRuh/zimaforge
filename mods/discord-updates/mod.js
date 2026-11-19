@@ -98,13 +98,23 @@
 
   /**
    * Wie „Check again“ im App Store: Update-Prüfung für alle Apps (`items: []`) und einen
-   * neuen Abgleich der Images anstoßen. Nur Abfragen – installiert wird nichts.
+   * neuen Abgleich der Images. Nur Abfragen – installiert wird nichts.
+   *
+   * Der Image-Abgleich läuft mit `sync: true`: ZimaOS fragt dann erst alle Registries und
+   * antwortet mit dem fertigen Ergebnis (einige Sekunden). Mit `sync: false` käme sofort der
+   * alte Stand zurück, und neu gefundene Images fehlten bis zur nächsten Prüfung.
+   * Gibt die frische Image-Liste zurück, sonst `null`.
    */
   async function triggerCheck() {
-    await Promise.allSettled([
+    const [, drift] = await Promise.allSettled([
       getJson("/zimaapp/update/check", { method: "POST", body: JSON.stringify({ items: [], locale: LOCALE, options: { sync: true } }) }),
-      getJson("/zimaapp/v2app/images/drift/list", { method: "POST", body: JSON.stringify({ options: { sync: false } }) }),
+      getJson("/zimaapp/v2app/images/drift/list", {
+        method: "POST",
+        body: JSON.stringify({ options: { sync: true } }),
+        signal: AbortSignal.timeout?.(90_000),
+      }),
     ]);
+    return drift.status === "fulfilled" && Array.isArray(drift.value?.data?.items) ? drift.value : null;
   }
 
   /** App-Updates aus dem App Store (neue Version). Ignorierte haben eine andere `availability`. */
@@ -129,8 +139,8 @@
   }
 
   /** Neue Images unter gleichem Tag (z. B. `:latest`) – „Image-Änderungen“ im App Store. */
-  async function imageUpdates() {
-    return items(await getJson("/zimaapp/v2app/images/drift/list"))
+  async function imageUpdates(fresh) {
+    return items(fresh ?? await getJson("/zimaapp/v2app/images/drift/list"))
       .map((d) => {
         const changed = (d?.images ?? []).filter((img) => img?.target_digest
           && !(Array.isArray(img.current_digests) ? img.current_digests : []).includes(img.target_digest));
@@ -175,7 +185,7 @@
 
   /** Alles, was der Reiter „Aktualisieren“ zeigt: App-Updates und neue Images. */
   async function upgradable() {
-    if (config.trigger !== false) await triggerCheck();
+    const drift = config.trigger !== false ? await triggerCheck() : null;
     let apps;
     try {
       apps = await appUpdates();
@@ -184,7 +194,7 @@
       return legacyUpdates();
     }
     let images = [];
-    try { images = await imageUpdates(); } catch (err) { if (err.status === 401) throw err; }
+    try { images = await imageUpdates(drift); } catch (err) { if (err.status === 401) throw err; }
     // Hat eine App beides, reicht die Meldung mit der neuen Version.
     const withVersion = new Set(apps.map((a) => a.id));
     return [...apps, ...images.filter((i) => !withVersion.has(i.id.slice("image:".length)))];
@@ -211,7 +221,9 @@
     const embed = {
       author: { name: "ZimaOS App Store" },
       title: title.slice(0, 256),
-      url: `${location.origin}/`,
+      // Je Embed eine eigene Adresse: Discord fasst Embeds mit gleicher `url` zu einem
+      // zusammen und zeigt dann nur den Text des ersten.
+      url: `${location.origin}/?zf-update=${encodeURIComponent(app.id ?? "test")}`,
       description: description.slice(0, 4000),
       color: app.kind === "image" ? COLOR_IMAGE : COLOR,
       footer: { text: `ZimaForge · ${location.host}` },
